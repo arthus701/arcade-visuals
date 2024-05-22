@@ -29,7 +29,7 @@ def func(coords, seed=141):
     return (res + 1) / 2
 
 
-def ngon_polar(ang, angs, scale=200):
+def ngon_polar(ang, angs):
     # n_points = 3
 
     _angs = np.hstack(
@@ -46,7 +46,7 @@ def ngon_polar(ang, angs, scale=200):
             np.sin(np.deg2rad(_angs)),
         ]
     )
-    return scale * np.array(
+    return np.array(
         [
             np.interp(ang, _angs, points[0]),
             np.interp(ang, _angs, points[1]),
@@ -56,10 +56,11 @@ def ngon_polar(ang, angs, scale=200):
 
 TIME = 0
 INTERPOLATE_TIME = 0
-
-INTERPOLATE_SPAN = 10
 STARTTIME = time.time()
+
+INTERPOLATE_SPAN = 3
 ANGS = np.linspace(0, 360, 401)
+SCALE = 200
 
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
@@ -80,6 +81,17 @@ form_2 = [
     90,
     180,
     270,
+]
+
+formlist = [
+    ngon_polar(ANGS, form_1),
+    ngon_polar(ANGS, form_2),
+    np.array(
+        [
+            np.cos(np.deg2rad(ANGS)),
+            np.sin(np.deg2rad(ANGS)),
+        ]
+    )
 ]
 
 
@@ -110,6 +122,9 @@ class MyGame(arcade.Window):
             # (100, 0, 200, 100),
             (0, 0, 0, 0),
         )
+
+        self.new_form = formlist[0]
+        self.old_form = self.new_form.copy()
 
         self.line = np.zeros((2, len(ANGS)))
 
@@ -158,14 +173,20 @@ class MyGame(arcade.Window):
         global TIME, INTERPOLATE_TIME, INTERPOLATE_SPAN
         TIME = time.time() - STARTTIME
         # if TIME %
-        INTERPOLATE_TIME = (TIME % INTERPOLATE_SPAN) / INTERPOLATE_SPAN
-        # print(INTERPOLATE_TIME)
+        INTERPOLATE_TIME += delta_time / INTERPOLATE_SPAN
+        if 1. < INTERPOLATE_TIME:
+            INTERPOLATE_TIME -= 1
+            self.old_form = self.new_form.copy()
+            idx = rng.integers(len(formlist))
+            # print(idx)
+            self.new_form = formlist[idx]
+
         arg = np.round(TIME, 2)
 
         rad = np.array(
             [
                 np.cos(arg) * np.ones(self.line.shape[1]),
-                1 * func(self.line),
+                1. + 0.4 * func(self.line),
             ],
         )
         # rad = 1.
@@ -176,8 +197,11 @@ class MyGame(arcade.Window):
                 height // 2,
             ]
         )
-
-        self.line = rad * ngon_polar(ANGS, form_1) + offset[:, None]
+        exp = 4
+        self.line = SCALE * rad * (
+            (1 - INTERPOLATE_TIME**exp) * self.old_form
+            + INTERPOLATE_TIME**exp * self.new_form
+        ) + offset[:, None]
 
 
 def main():
