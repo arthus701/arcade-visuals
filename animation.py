@@ -6,11 +6,14 @@ import numpy as np
 
 from simplex_noise import snoise
 
+import pyaudio
+
+import audioop
 
 rng = np.random.default_rng(1312)
 
 
-def func(coords, seed=141):
+def func(coords, seed=9999, freq=0.005):
     global TIME
 
     _coords = np.vstack(
@@ -53,6 +56,29 @@ def ngon_polar(ang, angs):
         ],
     )
 
+def categorize_audio_freqs(freqs, fft_data):
+    low = mid = high = low_c = mid_c = high_c = 1
+    i = 0
+    for freq in freqs:
+        freq = abs(freq * 11025.0)
+        if freq <= 0:
+            continue
+
+        fftp = fft_data[i].real
+        if freq <= 200 and fftp > low_c:
+            low = freq
+            low_c = fftp
+        elif 200 < freq <= 2000 and fftp > mid_c:
+            mid = freq
+            mid_c = fftp
+        elif 2000 < freq <= 20000 and fftp > high_c:
+            high = freq
+            high_c = fftp
+        
+        i = i + 1
+    
+    return [[low, mid, high], [low_c, mid_c, high_c]]
+
 
 TIME = 0
 INTERPOLATE_TIME = 0
@@ -94,6 +120,10 @@ formlist = [
     )
 ]
 
+CHUNK = 3500  # Number of data points to read at a time
+RATE = 44100  # Samples per second
+p = pyaudio.PyAudio()
+stream = p.open(format=pyaudio.paInt16, channels=1, rate=RATE, input=True, frames_per_buffer=CHUNK)
 
 class MyGame(arcade.Window):
     """ Main application class. """
@@ -128,6 +158,11 @@ class MyGame(arcade.Window):
 
         self.line = np.zeros((2, len(ANGS)))
 
+        self.mid_line = np.zeros((2, len(ANGS)))
+
+        self.high_line = np.zeros((2, len(ANGS)))
+
+
     def on_draw(self):
         """
         Render the screen.
@@ -153,8 +188,20 @@ class MyGame(arcade.Window):
 
         arcade.draw_line_strip(
             self.line.T,
-            arcade.color.WHITE,
-            3,
+            arcade.color.RED,
+            6,
+        )
+
+        arcade.draw_line_strip(
+            self.mid_line.T,
+            (84, 1, 112),
+            4
+        )
+
+        arcade.draw_line_strip(
+            self.high_line.T,
+            (58, 219, 0),
+            4
         )
 
     def on_key_press(self, key, modifiers):
@@ -183,10 +230,43 @@ class MyGame(arcade.Window):
 
         arg = np.round(TIME, 2)
 
+        buffer_data = stream.read(CHUNK)
+
+        rms = audioop.rms(buffer_data, 2)  # Calculate the RMS value of each chunk to measure the volume in real time
+
+        data = np.frombuffer(buffer_data, dtype=np.int16)
+        # Apply FFT to the audio data to analyze frequency components
+        fft_data = np.fft.fft(data)
+        frequencies = np.fft.fftfreq(len(fft_data), d=0.1)
+        freqs_cat = categorize_audio_freqs(frequencies, fft_data)
+
+        if rms < 500:
+            rms_eval = 0
+        else:
+            rms_eval = rms / 1000
+
+        arcade.set_background_color(
+            (min(rms_eval * 100, 200), min(rms_eval * 100, 200), min(rms_eval * 100, 200), min(rms_eval, 0))
+        )
+
         rad = np.array(
             [
-                np.cos(arg) * np.ones(self.line.shape[1]),
-                1. + 0.4 * func(self.line),
+                np.cos(arg) * np.ones(self.line.shape[1]) * (freqs_cat[0][0] / 100),
+                1. + 0.2 * func(self.line) * (freqs_cat[1][0]),
+            ],
+        )
+
+        rad_mid = np.array(
+            [
+                np.cos(arg) * np.ones(self.mid_line.shape[1]) * (freqs_cat[0][1] / 100),
+                1. + 0.2 * func(self.mid_line) * (freqs_cat[1][1] / 1000000),
+            ],
+        )
+
+        rad_high = np.array(
+            [
+                np.cos(arg) * np.ones(self.high_line.shape[1]) * (freqs_cat[0][2] / 1000),
+                1. + 0.2 * func(self.high_line) * (freqs_cat[1][2] / 100000),
             ],
         )
         # rad = 1.
@@ -198,7 +278,21 @@ class MyGame(arcade.Window):
             ]
         )
         exp = 4
-        self.line = SCALE * rad * (
+        rms_scale = min(rms_eval, 0.9)
+        if rms_eval == 0:
+            rms_scale = 0.1
+        
+        self.line = SCALE * rad * rms_scale * (
+            (1 - INTERPOLATE_TIME**exp) * self.old_form
+            + INTERPOLATE_TIME**exp * self.new_form
+        ) + offset[:, None] 
+
+        self.mid_line = SCALE * rad_mid * rms_scale * (
+            (1 - INTERPOLATE_TIME**exp) * self.old_form
+            + INTERPOLATE_TIME**exp * self.new_form
+        ) + offset[:, None]
+
+        self.high_line = SCALE * rad_high * rms_scale * (
             (1 - INTERPOLATE_TIME**exp) * self.old_form
             + INTERPOLATE_TIME**exp * self.new_form
         ) + offset[:, None]
@@ -208,6 +302,7 @@ def main():
     """ Main function """
     MyGame()
     arcade.run()
+    stream.close()
 
 
 if __name__ == "__main__":
