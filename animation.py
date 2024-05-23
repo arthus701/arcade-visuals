@@ -138,6 +138,13 @@ class PointCloud(object):
         )
 
 
+formInterpolator = RandomInterpolator(
+            INTERPOLATE_SPAN,
+            formlist,
+            4,
+        )
+
+
 class MyGame(arcade.Window):
     """ Main application class. """
 
@@ -164,15 +171,6 @@ class MyGame(arcade.Window):
         arcade.set_background_color(
             # (100, 0, 200, 100),
             (0, 0, 0, 0),
-        )
-
-        self.new_form = formlist[0]
-        self.old_form = self.new_form.copy()
-
-        self.formInterpolator = RandomInterpolator(
-            INTERPOLATE_SPAN,
-            formlist,
-            4,
         )
 
         self.line = np.zeros((2, len(ANGS)))
@@ -240,7 +238,7 @@ class MyGame(arcade.Window):
         SCALE = min(width, height) / 6
         global TIME
         TIME = time.time() - STARTTIME
-        self.formInterpolator.update(delta_time)
+        formInterpolator.update(delta_time)
 
         arg = np.round(TIME, 2)
 
@@ -259,7 +257,7 @@ class MyGame(arcade.Window):
             ]
         )
 
-        self.line = SCALE * rad * self.formInterpolator.get() + offset[:, None]
+        self.line = SCALE * rad * formInterpolator.get() + offset[:, None]
 
         self.pointcloud.coords += \
             grad(self.pointcloud.get_coords(width, height)) * delta_time
