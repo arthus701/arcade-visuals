@@ -6,6 +6,8 @@ import numpy as np
 
 from simplex_noise import snoise
 
+from random_interpolator import RandomInterpolator
+
 
 rng = np.random.default_rng(1312)
 
@@ -87,7 +89,6 @@ def ngon_polar(ang, angs):
 
 
 TIME = 0
-INTERPOLATE_TIME = 0
 STARTTIME = time.time()
 
 INTERPOLATE_SPAN = 3
@@ -168,6 +169,12 @@ class MyGame(arcade.Window):
         self.new_form = formlist[0]
         self.old_form = self.new_form.copy()
 
+        self.formInterpolator = RandomInterpolator(
+            INTERPOLATE_SPAN,
+            formlist,
+            4,
+        )
+
         self.line = np.zeros((2, len(ANGS)))
 
         self.pointcloud = PointCloud(5000)
@@ -231,16 +238,9 @@ class MyGame(arcade.Window):
     def on_update(self, delta_time):
         width, height = self.get_size()
         SCALE = min(width, height) / 6
-        global TIME, INTERPOLATE_TIME, INTERPOLATE_SPAN
+        global TIME
         TIME = time.time() - STARTTIME
-        # if TIME %
-        INTERPOLATE_TIME += delta_time / INTERPOLATE_SPAN
-        if 1. < INTERPOLATE_TIME:
-            INTERPOLATE_TIME -= 1
-            self.old_form = self.new_form.copy()
-            idx = rng.integers(len(formlist))
-            # print(idx)
-            self.new_form = formlist[idx]
+        self.formInterpolator.update(delta_time)
 
         arg = np.round(TIME, 2)
 
@@ -258,11 +258,8 @@ class MyGame(arcade.Window):
                 height // 2,
             ]
         )
-        exp = 4
-        self.line = SCALE * rad * (
-            (1 - INTERPOLATE_TIME**exp) * self.old_form
-            + INTERPOLATE_TIME**exp * self.new_form
-        ) + offset[:, None]
+
+        self.line = SCALE * rad * self.formInterpolator.get() + offset[:, None]
 
         self.pointcloud.coords += \
             grad(self.pointcloud.get_coords(width, height)) * delta_time
