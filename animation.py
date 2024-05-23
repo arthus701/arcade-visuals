@@ -22,11 +22,43 @@ def func(coords, seed=141):
     res = snoise(
         _coords,
         octaves=6,
-        frequency=1 / 200,
+        frequency=1/200,
         seed=seed,
     )
     res /= np.max(np.abs(res))
     return (res + 1) / 2
+
+
+def curl_func(coords):
+    res = 1 * snoise(
+        coords,
+        octaves=4,
+        frequency=1/200,
+        seed=131451,
+    )
+    return res
+
+
+def grad(y, h=1e-2):
+    ret = np.zeros((2, y.shape[1]))
+    vec = np.zeros((3, y.shape[1]))
+    vec[:2] = y
+
+    for it in range(2):
+        dir = np.zeros(3)
+        dir[it] = 1.
+
+        pfield = curl_func((vec + dir[:, None] * h))
+        nfield = curl_func((vec - dir[:, None] * h))
+        ret[it] = ((pfield - nfield) / (2 * h))
+
+    curl = np.array(
+        [
+            ret[1],
+            -ret[0],
+        ],
+    )
+    return curl
 
 
 def ngon_polar(ang, angs):
@@ -64,11 +96,7 @@ SCALE = 200
 
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
-SCREEN_TITLE = "Full Screen Example"
-
-# How many pixels to keep as a minimum margin between the character
-# and the edge of the screen.
-MOVEMENT_SPEED = 5
+SCREEN_TITLE = "Animation"
 
 form_1 = [
     0,
@@ -93,6 +121,20 @@ formlist = [
         ]
     )
 ]
+
+
+class PointCloud(object):
+    def __init__(self, n=10):
+        self.n = n
+
+        self.coords = rng.uniform(size=(2, self.n))
+        self.colors = rng.integers(low=0, high=255, size=(3, self.n))
+
+    def get_coords(self, width, height):
+        return (
+            self.coords * np.array([width, height])[:, None]
+            % np.array([width, height])[:, None]
+        )
 
 
 class MyGame(arcade.Window):
@@ -128,6 +170,8 @@ class MyGame(arcade.Window):
 
         self.line = np.zeros((2, len(ANGS)))
 
+        self.pointcloud = PointCloud(5000)
+
     def on_draw(self):
         """
         Render the screen.
@@ -151,10 +195,26 @@ class MyGame(arcade.Window):
 
         width, height = self.get_size()
 
+        # for point, color in zip(
+        #     self.pointcloud.get_coords(width=width, height=height).T,
+        #     self.pointcloud.colors.T
+        # ):
+        #     arcade.draw_point(
+        #         *point,
+        #         color,
+        #         4
+        #     )
+
+        arcade.draw_points(
+            self.pointcloud.get_coords(width=width, height=height).T,
+            (255, 255, 255, 255),
+            2,
+        )
+
         arcade.draw_line_strip(
             self.line.T,
             arcade.color.WHITE,
-            3,
+            10,
         )
 
     def on_key_press(self, key, modifiers):
@@ -170,6 +230,7 @@ class MyGame(arcade.Window):
 
     def on_update(self, delta_time):
         width, height = self.get_size()
+        SCALE = min(width, height) / 6
         global TIME, INTERPOLATE_TIME, INTERPOLATE_SPAN
         TIME = time.time() - STARTTIME
         # if TIME %
@@ -185,8 +246,8 @@ class MyGame(arcade.Window):
 
         rad = np.array(
             [
-                np.cos(arg) * np.ones(self.line.shape[1]),
-                1. + 0.4 * func(self.line),
+                np.cos(arg / 20) * np.ones(self.line.shape[1]),
+                1 + 1 * func(self.line),
             ],
         )
         # rad = 1.
@@ -202,6 +263,9 @@ class MyGame(arcade.Window):
             (1 - INTERPOLATE_TIME**exp) * self.old_form
             + INTERPOLATE_TIME**exp * self.new_form
         ) + offset[:, None]
+
+        self.pointcloud.coords += \
+            grad(self.pointcloud.get_coords(width, height)) * delta_time
 
 
 def main():
