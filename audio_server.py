@@ -81,7 +81,12 @@ def main():
 
         for client in CLIENTS:
             raw_msg = json.dumps(audio_data).encode("utf-8")
-            server_socket.sendto(raw_msg, client)
+            try:
+                server_socket.sendto(raw_msg, client)
+            except OSError as e:
+                print(e)
+                server_socket.close()
+                raise e
 
         delta = time.perf_counter_ns() - start_time
         if delta < BILLION / UPDATE_RATE:
@@ -90,4 +95,8 @@ def main():
             print(f"Framerate dropped below {UPDATE_RATE}")
 
 if __name__ == "__main__":
-    main()
+    while True:
+        try:
+            main()
+        except OSError:
+            time.sleep(0.5)
