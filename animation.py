@@ -7,39 +7,48 @@ import numpy as np
 from simplex_noise import snoise
 
 from random_interpolator import RandomInterpolator
-from parameters import INTERPOLATE_SPAN, formlist, ANGS
-
+from parameters import (
+    angs,
+    form_span,
+    form_list,
+    bgseed_span,
+    bgseed_list,
+    bgfreq_span,
+    bgfreq_list,
+)
 
 rng = np.random.default_rng(1312)
 
 
 formInterpolator = RandomInterpolator(
-    INTERPOLATE_SPAN,
-    formlist,
+    form_span,
+    form_list,
     4,
 )
 
-seedInterpolator = RandomInterpolator(
-    INTERPOLATE_SPAN,
-    [134123, 0, 131213],
+bgseedInterpolator = RandomInterpolator(
+    bgseed_span,
+    bgseed_list,
     0,
 )
 
-STARTTIME = time.time()
-TIME = 0
+bgfreqInterpolator = RandomInterpolator(
+    bgfreq_span,
+    bgfreq_list,
+    0.3,
+)
 
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
-SCREEN_TITLE = "Animation"
+starttime = time.time()
+now = 0
 
 
 def func(coords, seed=141):
-    global TIME
+    global now
 
     _coords = np.vstack(
         (
             coords,
-            TIME * np.ones((1, coords.shape[1])) * 100,
+            now * np.ones((1, coords.shape[1])) * 100,
         ),
     )
     res = snoise(
@@ -56,8 +65,8 @@ def curl_func(coords):
     res = 1 * snoise(
         coords,
         octaves=4,
-        frequency=1/200,
-        seed=seedInterpolator.get(),
+        frequency=bgfreqInterpolator.get(),
+        seed=int(bgseedInterpolator.get()),
     )
     return res
 
@@ -102,66 +111,33 @@ class MyGame(arcade.Window):
     """ Main application class. """
 
     def __init__(self):
-        """
-        Initializer
-        """
-        # Open a window in full screen mode. Remove fullscreen=True if
-        # you don't want to start this way.
         super().__init__(
-            SCREEN_WIDTH,
-            SCREEN_HEIGHT,
-            SCREEN_TITLE,
+            800,
+            600,
+            "Animation",
             fullscreen=False,
         )
 
-        # This will get the size of the window, and set the viewport to match.
-        # So if the window is 1000x1000, then so will our viewport. If
-        # you want something different, then use those coordinates instead.
         width, height = self.get_size()
         self.set_viewport(0, width, 0, height)
         self.set_vsync(True)
 
         arcade.set_background_color(
-            # (100, 0, 200, 100),
             (0, 0, 0, 0),
         )
 
-        self.line = np.zeros((2, len(ANGS)))
+        self.line = np.zeros((2, len(angs)))
 
         self.pointcloud = PointCloud(5000)
 
     def on_draw(self):
-        """
-        Render the screen.
-        """
 
-        self.clear(
-            # (100, 0, 200, 100)
-        )
+        self.clear()
 
         # Get viewport dimensions
         left, screen_width, bottom, screen_height = self.get_viewport()
 
-        # text_size = 18
-        # Draw text on the screen so the user has an idea of what is happening
-        # arcade.draw_text(
-        #     "Press F to toggle between full screen and "
-        #     "windowed mode, unstretched.",
-        #     screen_width // 2, screen_height // 2 - 20,
-        #     arcade.color.WHITE, text_size, anchor_x="center"
-        #     )
-
         width, height = self.get_size()
-
-        # for point, color in zip(
-        #     self.pointcloud.get_coords(width=width, height=height).T,
-        #     self.pointcloud.colors.T
-        # ):
-        #     arcade.draw_point(
-        #         *point,
-        #         color,
-        #         4
-        #     )
 
         arcade.draw_points(
             self.pointcloud.get_coords(width=width, height=height).T,
@@ -188,12 +164,14 @@ class MyGame(arcade.Window):
 
     def on_update(self, delta_time):
         width, height = self.get_size()
-        SCALE = min(width, height) / 6
-        global TIME
-        TIME = time.time() - STARTTIME
+        scale = min(width, height) / 6
+        global now
+        now = time.time() - starttime
         formInterpolator.update(delta_time)
+        bgseedInterpolator.update(delta_time)
+        bgfreqInterpolator.update(delta_time)
 
-        arg = np.round(TIME, 2)
+        arg = np.round(now, 2)
 
         rad = np.array(
             [
@@ -210,7 +188,7 @@ class MyGame(arcade.Window):
             ]
         )
 
-        self.line = SCALE * rad * formInterpolator.get() + offset[:, None]
+        self.line = scale * rad * formInterpolator.get() + offset[:, None]
 
         self.pointcloud.coords += \
             grad(self.pointcloud.get_coords(width, height)) * delta_time
