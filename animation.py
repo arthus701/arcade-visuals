@@ -193,6 +193,8 @@ class MyGame(arcade.Window):
         self.mid_buffer = np.zeros(buffersize)
         self.high_buffer = np.zeros(buffersize)
 
+        self.rms_buffer = np.zeros(buffersize)
+
         arcade.enable_timings()
 
     def on_draw(self):
@@ -313,13 +315,21 @@ class MyGame(arcade.Window):
 
             self.high_buffer[1:] = self.high_buffer[:-1]
             self.high_buffer[0] = high_c_norm
+
+            rms = data['rms']
+            rms_norm = np.clip(rms, None, 1e4) / 1e4
+
+            self.rms_buffer[1:] = self.rms_buffer[:-1]
+            self.rms_buffer[0] = rms_norm
         except UnboundLocalError:
             pass
 
         self.background_intensity = np.mean(self.low_buffer)
 
-        rad_mid = np.mean(self.mid_buffer) * 10
-        rad_high = (np.mean(self.high_buffer) - 0.5) * 500
+        rms_val = self.rms_buffer.mean()
+
+        rad_mid = rms_val * 400 + np.mean(self.mid_buffer) * 100
+        rad_high = rms_val * 10 + np.mean(self.high_buffer) * 4
 
         # rad = 1.
 

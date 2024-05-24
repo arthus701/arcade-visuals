@@ -46,7 +46,7 @@ mul_list = [1., 0.5, 0.1]
 
 # -----------------------------------------------------------------------------
 # background noise
-bgcolor_span = 1000
+bgcolor_span = 1
 bgcolor_list = [
     np.array([255, 0, 0]),
     np.array([200, 0, 155]),
@@ -54,7 +54,7 @@ bgcolor_list = [
     np.array([255, 0, 255]),
 ]
 
-bgtail_span = 10
+bgtail_span = 40
 bgtail_list = [10, 255, 100, 200]
 
 bgseed_span = 30
