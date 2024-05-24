@@ -1,6 +1,7 @@
 import arcade
-
+import socket
 import time
+import json
 
 import numpy as np
 
@@ -150,6 +151,9 @@ class PointCloud(object):
         )
 
 
+PORT = 46498
+
+
 class MyGame(arcade.Window):
     """ Main application class. """
 
@@ -161,6 +165,13 @@ class MyGame(arcade.Window):
             fullscreen=False,
             vsync=True,
         )
+
+        self.socket = socket.socket(
+            socket.AF_INET,
+            socket.SOCK_DGRAM,
+        )
+        self.socket.bind(("0.0.0.0", PORT))
+        self.socket.setblocking(0)
 
         width, height = self.get_size()
         self.set_viewport(0, width, 0, height)
@@ -177,7 +188,7 @@ class MyGame(arcade.Window):
 
         self.pointcloud = PointCloud(num_points)
 
-        buffersize = 5
+        buffersize = 3
         self.low_buffer = np.zeros(buffersize)
         self.mid_buffer = np.zeros(buffersize)
         self.high_buffer = np.zeros(buffersize)
@@ -276,30 +287,39 @@ class MyGame(arcade.Window):
             ]
         )
         # XXX READING HERE
-        freqs_cat = [[0, 0, 0], [0, 0, 0]]
+        try:
+            while True:
+                raw_data = self.socket.recv(1024)
+        except BlockingIOError:
+            pass
 
-        low_c = freqs_cat[1][0]
-        low_c_norm = np.clip(low_c, None, 6e6) / 6e6
+        try:
+            data = json.loads(raw_data)
 
-        self.low_buffer[1:] = self.low_buffer[:-1]
-        self.low_buffer[0] = low_c_norm
+            low_c = data['low_peak']['amp']
+            low_c_norm = np.clip(low_c, None, 6e6) / 6e6
 
-        mid_c = freqs_cat[1][1]
-        mid_c_norm = np.clip(mid_c, None, 6e6) / 6e6
+            self.low_buffer[1:] = self.low_buffer[:-1]
+            self.low_buffer[0] = low_c_norm
 
-        self.mid_buffer[1:] = self.mid_buffer[:-1]
-        self.mid_buffer[0] = mid_c_norm
+            mid_c = data['mid_peak']['amp']
+            mid_c_norm = np.clip(mid_c, None, 6e6) / 6e6
 
-        high_c = freqs_cat[1][1]
-        high_c_norm = np.clip(high_c, None, 6e6) / 6e6
+            self.mid_buffer[1:] = self.mid_buffer[:-1]
+            self.mid_buffer[0] = mid_c_norm
 
-        self.high_buffer[1:] = self.high_buffer[:-1]
-        self.high_buffer[0] = high_c_norm
+            high_c = data['high_peak']['amp']
+            high_c_norm = np.clip(high_c, None, 6e6) / 6e6
+
+            self.high_buffer[1:] = self.high_buffer[:-1]
+            self.high_buffer[0] = high_c_norm
+        except UnboundLocalError:
+            pass
 
         self.background_intensity = np.mean(self.low_buffer)
 
-        rad_mid = np.mean(self.mid_buffer) * 500
-        rad_high = np.mean(self.high_buffer) * 500
+        rad_mid = np.mean(self.mid_buffer) * 10
+        rad_high = (np.mean(self.high_buffer) - 0.5) * 500
 
         # rad = 1.
 
@@ -334,7 +354,6 @@ def main():
     """ Main function """
     MyGame()
     arcade.run()
-    stream.close()
 
 
 if __name__ == "__main__":
