@@ -6,6 +6,7 @@ import numpy as np
 
 from simplex_noise import snoise
 
+
 from random_interpolator import RandomInterpolator
 from parameters import (
     num_points,
@@ -23,6 +24,10 @@ from parameters import (
     bgfreq_span,
     bgfreq_list,
 )
+
+import pyaudio
+
+import audioop
 
 rng = np.random.default_rng(1312)
 
@@ -118,6 +123,30 @@ def grad(y, h=1e-2):
     return curl
 
 
+def categorize_audio_freqs(freqs, fft_data):
+    low = mid = high = low_c = mid_c = high_c = 1
+    i = 0
+    for freq in freqs:
+        freq = abs(freq * 11025.0)
+        if freq <= 0:
+            continue
+
+        fftp = fft_data[i].real
+        if freq <= 200 and fftp > low_c:
+            low = freq
+            low_c = fftp
+        elif 200 < freq <= 2000 and fftp > mid_c:
+            mid = freq
+            mid_c = fftp
+        elif 2000 < freq <= 20000 and fftp > high_c:
+            high = freq
+            high_c = fftp
+
+        i = i + 1
+
+    return [[low, mid, high], [low_c, mid_c, high_c]]
+
+
 class PointCloud(object):
     def __init__(self, n=10):
         self.n = n
@@ -132,6 +161,18 @@ class PointCloud(object):
         )
 
 
+CHUNK = 600  # Number of data points to read at a time
+RATE = 44100  # Samples per second
+p = pyaudio.PyAudio()
+stream = p.open(
+    format=pyaudio.paInt16,
+    channels=1,
+    rate=RATE,
+    input=True,
+    frames_per_buffer=CHUNK,
+)
+
+
 class MyGame(arcade.Window):
     """ Main application class. """
 
@@ -141,6 +182,7 @@ class MyGame(arcade.Window):
             600,
             "Animation",
             fullscreen=False,
+            vsync=True,
         )
 
         width, height = self.get_size()
@@ -153,7 +195,13 @@ class MyGame(arcade.Window):
 
         self.line = np.zeros((2, ang_reso))
 
+        self.mid_line = np.zeros((2, ang_reso))
+
+        self.high_line = np.zeros((2, ang_reso))
+
         self.pointcloud = PointCloud(num_points)
+
+        arcade.enable_timings()
 
     def on_draw(self):
 
@@ -177,8 +225,20 @@ class MyGame(arcade.Window):
         )
         arcade.draw_line_strip(
             self.line.T,
-            arcade.color.WHITE,
+            arcade.color.YELLOW,
             2,
+        )
+
+        arcade.draw_line_strip(
+            self.mid_line.T,
+            arcade.color.BLUE,
+            3
+        )
+
+        arcade.draw_line_strip(
+            self.high_line.T,
+            (58, 219, 0),
+            3
         )
 
     def on_key_press(self, key, modifiers):
@@ -193,6 +253,7 @@ class MyGame(arcade.Window):
             self.set_viewport(0, width, 0, height)
 
     def on_update(self, delta_time):
+        print(arcade.get_fps())
         width, height = self.get_size()
         scale = min(width, height) / 6
         global now
@@ -215,6 +276,45 @@ class MyGame(arcade.Window):
                 np.ones(ang_reso),
                 addInterpolator.get()
                 + mulInterpolator.get() * func(self.line),
+            ]
+        )
+        buffer_data = stream.read(CHUNK)
+        # Calculate the RMS value of each chunk to measure the volume
+        # in real time
+        rms = audioop.rms(buffer_data, 2)
+
+        data = np.frombuffer(buffer_data, dtype=np.int16)
+        # Apply FFT to the audio data to analyze frequency components
+        fft_data = np.fft.fft(data)
+        frequencies = np.fft.fftfreq(len(fft_data), d=0.1)
+        freqs_cat = categorize_audio_freqs(frequencies, fft_data)
+
+        if rms < 500:
+            rms_eval = 0
+        else:
+            rms_eval = rms / 1000
+
+        arcade.set_background_color(
+            (
+                min((rms_eval * 100), 200),
+                min((rms_eval * 10), 200),
+                min((rms_eval * 10), 200),
+            )
+        )
+
+        rad_mid = np.array(
+            [
+                np.cos(arg) * np.ones(self.mid_line.shape[1])
+                * (freqs_cat[0][1] / 100),
+                1. + 0.2 * func(self.mid_line) * (freqs_cat[1][1] / 100000),
+            ],
+        )
+
+        rad_high = np.array(
+            [
+                np.cos(arg) * np.ones(self.high_line.shape[1])
+                * (freqs_cat[0][2] / 1000),
+                1. + 0.2 * func(self.high_line) * (freqs_cat[1][2] / 100000),
             ],
         )
         # rad = 1.
@@ -235,11 +335,24 @@ class MyGame(arcade.Window):
         self.pointcloud.coords += \
             grad(self.pointcloud.get_coords(width, height)) * delta_time
 
+        rms_scale = min(rms_eval, 0.9)
+        if rms_eval == 0:
+            rms_scale = 0.1
+
+        self.mid_line = scale * rad_mid * rms_scale * formInterpolator.get() \
+            + offset[:, None]
+
+        self.high_line = (
+            scale * rad_high * rms_scale * formInterpolator.get()
+            + offset[:, None]
+        )
+
 
 def main():
     """ Main function """
     MyGame()
     arcade.run()
+    stream.close()
 
 
 if __name__ == "__main__":
