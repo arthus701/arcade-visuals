@@ -1,10 +1,12 @@
 import arcade
-
+import socket
 import time
+import json
 
 import numpy as np
 
 from simplex_noise import snoise
+
 
 from random_interpolator import RandomInterpolator
 from parameters import (
@@ -18,11 +20,16 @@ from parameters import (
     add_list,
     mul_span,
     mul_list,
+    bgcolor_span,
+    bgcolor_list,
+    bgtail_span,
+    bgtail_list,
     bgseed_span,
     bgseed_list,
     bgfreq_span,
     bgfreq_list,
 )
+
 
 rng = np.random.default_rng(1312)
 
@@ -49,6 +56,18 @@ formInterpolator = RandomInterpolator(
     form_span,
     form_list,
     4,
+)
+
+bgcolorInterpolator = RandomInterpolator(
+    bgcolor_span,
+    bgcolor_list,
+    1,
+)
+
+bgtailInterpolator = RandomInterpolator(
+    bgtail_span,
+    bgtail_list,
+    0.5,
 )
 
 bgseedInterpolator = RandomInterpolator(
@@ -132,6 +151,9 @@ class PointCloud(object):
         )
 
 
+PORT = 46498
+
+
 class MyGame(arcade.Window):
     """ Main application class. """
 
@@ -141,11 +163,18 @@ class MyGame(arcade.Window):
             600,
             "Animation",
             fullscreen=False,
+            vsync=True,
         )
+
+        self.socket = socket.socket(
+            socket.AF_INET,
+            socket.SOCK_DGRAM,
+        )
+        self.socket.bind(("0.0.0.0", PORT))
+        self.socket.setblocking(0)
 
         width, height = self.get_size()
         self.set_viewport(0, width, 0, height)
-        self.set_vsync(True)
 
         arcade.set_background_color(
             (0, 0, 0, 0),
@@ -153,20 +182,47 @@ class MyGame(arcade.Window):
 
         self.line = np.zeros((2, ang_reso))
 
+        self.mid_line = np.zeros((2, ang_reso))
+
+        self.high_line = np.zeros((2, ang_reso))
+
         self.pointcloud = PointCloud(num_points)
+
+        buffersize = 3
+        self.low_buffer = np.zeros(buffersize)
+        self.mid_buffer = np.zeros(buffersize)
+        self.high_buffer = np.zeros(buffersize)
+
+        self.rms_buffer = np.zeros(buffersize)
+
+        arcade.enable_timings()
 
     def on_draw(self):
 
-        self.clear()
+        # self.clear()
 
         # Get viewport dimensions
         left, screen_width, bottom, screen_height = self.get_viewport()
 
         width, height = self.get_size()
 
+        bgcolor = bgcolorInterpolator.get()
+        arcade.draw_rectangle_filled(
+            width // 2,
+            height // 2,
+            width,
+            height,
+            color=(
+                bgcolor[0] * (0.1 + 0.9 * self.background_intensity),
+                bgcolor[1] * (0.1 + 0.9 * self.background_intensity),
+                bgcolor[2] * (0.1 + 0.9 * self.background_intensity),
+                bgtailInterpolator.get(),
+            ),
+        )
+
         arcade.draw_points(
             self.pointcloud.get_coords(width=width, height=height).T,
-            (255, 255, 255, 255),
+            arcade.color.WHITE,
             2,
         )
 
@@ -182,6 +238,18 @@ class MyGame(arcade.Window):
             2,
         )
 
+        arcade.draw_line_strip(
+            self.mid_line.T,
+            arcade.color.WHITE,
+            3
+        )
+
+        arcade.draw_line_strip(
+            self.high_line.T,
+            arcade.color.WHITE,
+            3
+        )
+
     def on_key_press(self, key, modifiers):
         """Called whenever a key is pressed. """
         if key == arcade.key.F:
@@ -194,12 +262,15 @@ class MyGame(arcade.Window):
             self.set_viewport(0, width, 0, height)
 
     def on_update(self, delta_time):
+        # print(arcade.get_fps())
         width, height = self.get_size()
         scale = min(width, height) / 6
         global now
         now = time.time() - starttime
         formInterpolator.update(delta_time)
         addInterpolator.update(delta_time)
+        bgcolorInterpolator.update(delta_time)
+        bgtailInterpolator.update(delta_time)
         bgseedInterpolator.update(delta_time)
         bgfreqInterpolator.update(delta_time)
 
@@ -216,8 +287,51 @@ class MyGame(arcade.Window):
                 np.ones(ang_reso),
                 addInterpolator.get()
                 + mulInterpolator.get() * func(self.line),
-            ],
+            ]
         )
+        # XXX READING HERE
+        try:
+            while True:
+                raw_data = self.socket.recv(1024)
+        except BlockingIOError:
+            pass
+
+        try:
+            data = json.loads(raw_data)
+
+            low_c = data['low_peak']['amp']
+            low_c_norm = np.clip(low_c, None, 6e6) / 6e6
+
+            self.low_buffer[1:] = self.low_buffer[:-1]
+            self.low_buffer[0] = low_c_norm
+
+            mid_c = data['mid_peak']['amp']
+            mid_c_norm = np.clip(mid_c, None, 6e6) / 6e6
+
+            self.mid_buffer[1:] = self.mid_buffer[:-1]
+            self.mid_buffer[0] = mid_c_norm
+
+            high_c = data['high_peak']['amp']
+            high_c_norm = np.clip(high_c, None, 6e6) / 6e6
+
+            self.high_buffer[1:] = self.high_buffer[:-1]
+            self.high_buffer[0] = high_c_norm
+
+            rms = data['rms']
+            rms_norm = np.clip(rms, None, 1e4) / 1e4
+
+            self.rms_buffer[1:] = self.rms_buffer[:-1]
+            self.rms_buffer[0] = rms_norm
+        except UnboundLocalError:
+            pass
+
+        self.background_intensity = np.mean(self.low_buffer)
+
+        rms_val = self.rms_buffer.mean()
+
+        rad_mid = rms_val * 400 + np.mean(self.mid_buffer) * 100
+        rad_high = rms_val * 10 + np.mean(self.high_buffer) * 4
+
         # rad = 1.
 
         offset = np.array(
@@ -227,14 +341,24 @@ class MyGame(arcade.Window):
             ]
         )
 
-        self.line = np.einsum(
+        line = np.einsum(
             'ijk, jk->ik',
             scale * rotmat,
             rad,
-         ) * formInterpolator.get() + offset[:, None]
+        ) * formInterpolator.get()
+
+        self.line = line + offset[:, None]
 
         self.pointcloud.coords += \
             grad(self.pointcloud.get_coords(width, height)) * delta_time
+
+        self.mid_line = (1 + rad_mid) * line + offset[:, None]
+        self.high_line = (1 - rad_high) * line + offset[:, None]
+
+        # self.high_line = (
+        #     scale * rad_high * rms_scale * formInterpolator.get()
+        #     + offset[:, None]
+        # )
 
 
 def main():
