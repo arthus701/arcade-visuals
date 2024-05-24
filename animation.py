@@ -7,9 +7,30 @@ import numpy as np
 from simplex_noise import snoise
 
 from random_interpolator import RandomInterpolator
+from parameters import INTERPOLATE_SPAN, formlist, ANGS
 
 
 rng = np.random.default_rng(1312)
+
+
+formInterpolator = RandomInterpolator(
+    INTERPOLATE_SPAN,
+    formlist,
+    4,
+)
+
+seedInterpolator = RandomInterpolator(
+    INTERPOLATE_SPAN,
+    [134123, 0, 131213],
+    0,
+)
+
+STARTTIME = time.time()
+TIME = 0
+
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 600
+SCREEN_TITLE = "Animation"
 
 
 def func(coords, seed=141):
@@ -36,7 +57,7 @@ def curl_func(coords):
         coords,
         octaves=4,
         frequency=1/200,
-        seed=131451,
+        seed=seedInterpolator.get(),
     )
     return res
 
@@ -63,67 +84,6 @@ def grad(y, h=1e-2):
     return curl
 
 
-def ngon_polar(ang, angs):
-    # n_points = 3
-
-    _angs = np.hstack(
-        [
-            # angs[0],
-            angs,
-            360 + angs[0],
-            # 360 + angs[0],
-        ]
-    )
-    points = np.array(
-        [
-            np.cos(np.deg2rad(_angs)),
-            np.sin(np.deg2rad(_angs)),
-        ]
-    )
-    return np.array(
-        [
-            np.interp(ang, _angs, points[0]),
-            np.interp(ang, _angs, points[1]),
-        ],
-    )
-
-
-TIME = 0
-STARTTIME = time.time()
-
-INTERPOLATE_SPAN = 3
-ANGS = np.linspace(0, 360, 401)
-SCALE = 200
-
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
-SCREEN_TITLE = "Animation"
-
-form_1 = [
-    0,
-    150,
-    270,
-]
-
-form_2 = [
-    0,
-    90,
-    180,
-    270,
-]
-
-formlist = [
-    ngon_polar(ANGS, form_1),
-    ngon_polar(ANGS, form_2),
-    np.array(
-        [
-            np.cos(np.deg2rad(ANGS)),
-            np.sin(np.deg2rad(ANGS)),
-        ]
-    )
-]
-
-
 class PointCloud(object):
     def __init__(self, n=10):
         self.n = n
@@ -135,13 +95,6 @@ class PointCloud(object):
         return (
             self.coords * np.array([width, height])[:, None]
             % np.array([width, height])[:, None]
-        )
-
-
-formInterpolator = RandomInterpolator(
-            INTERPOLATE_SPAN,
-            formlist,
-            4,
         )
 
 
