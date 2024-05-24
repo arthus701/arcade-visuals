@@ -187,7 +187,6 @@ class MyGame(arcade.Window):
 
         width, height = self.get_size()
         self.set_viewport(0, width, 0, height)
-        self.set_vsync(True)
 
         arcade.set_background_color(
             (0, 0, 0, 0),
@@ -205,12 +204,20 @@ class MyGame(arcade.Window):
 
     def on_draw(self):
 
-        self.clear()
+        # self.clear()
 
         # Get viewport dimensions
         left, screen_width, bottom, screen_height = self.get_viewport()
 
         width, height = self.get_size()
+
+        arcade.draw_rectangle_filled(
+            width // 2,
+            height // 2,
+            width,
+            height,
+            color=(0, 0, 0, 10),
+        )
 
         arcade.draw_points(
             self.pointcloud.get_coords(width=width, height=height).T,
@@ -225,7 +232,7 @@ class MyGame(arcade.Window):
         )
         arcade.draw_line_strip(
             self.line.T,
-            arcade.color.YELLOW,
+            arcade.color.WHITE,
             2,
         )
 
