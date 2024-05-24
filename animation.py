@@ -175,6 +175,7 @@ class MyGame(arcade.Window):
             arcade.color.WHITE,
             10,
         )
+
         arcade.draw_line_strip(
             self.line.T,
             arcade.color.WHITE,
