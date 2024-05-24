@@ -1,7 +1,7 @@
 import socket, time, json
 import pyaudio, audioop, numpy as np
 
-CHUNK = 600  # Number of data points to read at a time
+CHUNK = 1024  # Number of data points to read at a time
 
 RATE = 44100  # Samples per second
 
@@ -9,7 +9,7 @@ UPDATE_RATE = 60
 
 PORT = 46497
 
-CLIENTS = [ ("127.0.0.1", 46498) ]
+CLIENTS = [ ("10.0.1.9", 46498) ]
 
 BILLION = 1000000000
 
