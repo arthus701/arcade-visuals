@@ -19,6 +19,10 @@ from parameters import (
     add_list,
     mul_span,
     mul_list,
+    bgcolor_span,
+    bgcolor_list,
+    bgtail_span,
+    bgtail_list,
     bgseed_span,
     bgseed_list,
     bgfreq_span,
@@ -54,6 +58,18 @@ formInterpolator = RandomInterpolator(
     form_span,
     form_list,
     4,
+)
+
+bgcolorInterpolator = RandomInterpolator(
+    bgcolor_span,
+    bgcolor_list,
+    1,
+)
+
+bgtailInterpolator = RandomInterpolator(
+    bgtail_span,
+    bgtail_list,
+    0.5,
 )
 
 bgseedInterpolator = RandomInterpolator(
@@ -200,6 +216,11 @@ class MyGame(arcade.Window):
 
         self.pointcloud = PointCloud(num_points)
 
+        buffersize = 5
+        self.low_buffer = np.zeros(buffersize)
+        self.mid_buffer = np.zeros(buffersize)
+        self.high_buffer = np.zeros(buffersize)
+
         arcade.enable_timings()
 
     def on_draw(self):
@@ -211,17 +232,23 @@ class MyGame(arcade.Window):
 
         width, height = self.get_size()
 
+        bgcolor = bgcolorInterpolator.get()
         arcade.draw_rectangle_filled(
             width // 2,
             height // 2,
             width,
             height,
-            color=(0, 0, 0, 10),
+            color=(
+                bgcolor[0] * (0.1 + 0.9 * self.background_intensity),
+                bgcolor[1] * (0.1 + 0.9 * self.background_intensity),
+                bgcolor[2] * (0.1 + 0.9 * self.background_intensity),
+                bgtailInterpolator.get(),
+            ),
         )
 
         arcade.draw_points(
             self.pointcloud.get_coords(width=width, height=height).T,
-            (255, 255, 255, 255),
+            arcade.color.WHITE,
             2,
         )
 
@@ -238,13 +265,13 @@ class MyGame(arcade.Window):
 
         arcade.draw_line_strip(
             self.mid_line.T,
-            arcade.color.BLUE,
+            arcade.color.WHITE,
             3
         )
 
         arcade.draw_line_strip(
             self.high_line.T,
-            (58, 219, 0),
+            arcade.color.WHITE,
             3
         )
 
@@ -260,13 +287,15 @@ class MyGame(arcade.Window):
             self.set_viewport(0, width, 0, height)
 
     def on_update(self, delta_time):
-        print(arcade.get_fps())
+        # print(arcade.get_fps())
         width, height = self.get_size()
         scale = min(width, height) / 6
         global now
         now = time.time() - starttime
         formInterpolator.update(delta_time)
         addInterpolator.update(delta_time)
+        bgcolorInterpolator.update(delta_time)
+        bgtailInterpolator.update(delta_time)
         bgseedInterpolator.update(delta_time)
         bgfreqInterpolator.update(delta_time)
 
@@ -296,34 +325,29 @@ class MyGame(arcade.Window):
         frequencies = np.fft.fftfreq(len(fft_data), d=0.1)
         freqs_cat = categorize_audio_freqs(frequencies, fft_data)
 
-        if rms < 500:
-            rms_eval = 0
-        else:
-            rms_eval = rms / 1000
+        low_c = freqs_cat[1][0]
+        low_c_norm = np.clip(low_c, None, 6e6) / 6e6
 
-        arcade.set_background_color(
-            (
-                min((rms_eval * 100), 200),
-                min((rms_eval * 10), 200),
-                min((rms_eval * 10), 200),
-            )
-        )
+        self.low_buffer[1:] = self.low_buffer[:-1]
+        self.low_buffer[0] = low_c_norm
 
-        rad_mid = np.array(
-            [
-                np.cos(arg) * np.ones(self.mid_line.shape[1])
-                * (freqs_cat[0][1] / 100),
-                1. + 0.2 * func(self.mid_line) * (freqs_cat[1][1] / 100000),
-            ],
-        )
+        mid_c = freqs_cat[1][1]
+        mid_c_norm = np.clip(mid_c, None, 6e6) / 6e6
 
-        rad_high = np.array(
-            [
-                np.cos(arg) * np.ones(self.high_line.shape[1])
-                * (freqs_cat[0][2] / 1000),
-                1. + 0.2 * func(self.high_line) * (freqs_cat[1][2] / 100000),
-            ],
-        )
+        self.mid_buffer[1:] = self.mid_buffer[:-1]
+        self.mid_buffer[0] = mid_c_norm
+
+        high_c = freqs_cat[1][1]
+        high_c_norm = np.clip(high_c, None, 6e6) / 6e6
+
+        self.high_buffer[1:] = self.high_buffer[:-1]
+        self.high_buffer[0] = high_c_norm
+
+        self.background_intensity = np.mean(self.low_buffer)
+
+        rad_mid = np.mean(self.mid_buffer) * 500
+        rad_high = np.mean(self.high_buffer) * 500
+
         # rad = 1.
 
         offset = np.array(
@@ -333,26 +357,24 @@ class MyGame(arcade.Window):
             ]
         )
 
-        self.line = np.einsum(
+        line = np.einsum(
             'ijk, jk->ik',
             scale * rotmat,
             rad,
-         ) * formInterpolator.get() + offset[:, None]
+        ) * formInterpolator.get()
+
+        self.line = line + offset[:, None]
 
         self.pointcloud.coords += \
             grad(self.pointcloud.get_coords(width, height)) * delta_time
 
-        rms_scale = min(rms_eval, 0.9)
-        if rms_eval == 0:
-            rms_scale = 0.1
+        self.mid_line = (1 + rad_mid) * line + offset[:, None]
+        self.high_line = (1 - rad_high) * line + offset[:, None]
 
-        self.mid_line = scale * rad_mid * rms_scale * formInterpolator.get() \
-            + offset[:, None]
-
-        self.high_line = (
-            scale * rad_high * rms_scale * formInterpolator.get()
-            + offset[:, None]
-        )
+        # self.high_line = (
+        #     scale * rad_high * rms_scale * formInterpolator.get()
+        #     + offset[:, None]
+        # )
 
 
 def main():
