@@ -120,7 +120,7 @@ formlist = [
     )
 ]
 
-CHUNK = 3500  # Number of data points to read at a time
+CHUNK = 600  # Number of data points to read at a time
 RATE = 44100  # Samples per second
 p = pyaudio.PyAudio()
 stream = p.open(format=pyaudio.paInt16, channels=1, rate=RATE, input=True, frames_per_buffer=CHUNK)
@@ -139,6 +139,7 @@ class MyGame(arcade.Window):
             SCREEN_HEIGHT,
             SCREEN_TITLE,
             fullscreen=False,
+            vsync=True,
         )
 
         # This will get the size of the window, and set the viewport to match.
@@ -161,6 +162,8 @@ class MyGame(arcade.Window):
         self.mid_line = np.zeros((2, len(ANGS)))
 
         self.high_line = np.zeros((2, len(ANGS)))
+
+        arcade.enable_timings()
 
 
     def on_draw(self):
@@ -188,20 +191,20 @@ class MyGame(arcade.Window):
 
         arcade.draw_line_strip(
             self.line.T,
-            arcade.color.RED,
-            6,
+            arcade.color.YELLOW,
+            5,
         )
 
         arcade.draw_line_strip(
             self.mid_line.T,
-            (84, 1, 112),
-            4
+            arcade.color.BLUE,
+            3
         )
 
         arcade.draw_line_strip(
             self.high_line.T,
             (58, 219, 0),
-            4
+            3
         )
 
     def on_key_press(self, key, modifiers):
@@ -216,6 +219,7 @@ class MyGame(arcade.Window):
             self.set_viewport(0, width, 0, height)
 
     def on_update(self, delta_time):
+        print(arcade.get_fps())
         width, height = self.get_size()
         global TIME, INTERPOLATE_TIME, INTERPOLATE_SPAN
         TIME = time.time() - STARTTIME
@@ -246,7 +250,7 @@ class MyGame(arcade.Window):
             rms_eval = rms / 1000
 
         arcade.set_background_color(
-            (min(rms_eval * 100, 200), min(rms_eval * 100, 200), min(rms_eval * 100, 200), min(rms_eval, 0))
+            (min((rms_eval * 100), 200), min((rms_eval * 10), 200), min((rms_eval * 10), 200))
         )
 
         rad = np.array(
@@ -259,7 +263,7 @@ class MyGame(arcade.Window):
         rad_mid = np.array(
             [
                 np.cos(arg) * np.ones(self.mid_line.shape[1]) * (freqs_cat[0][1] / 100),
-                1. + 0.2 * func(self.mid_line) * (freqs_cat[1][1] / 1000000),
+                1. + 0.2 * func(self.mid_line) * (freqs_cat[1][1] / 100000),
             ],
         )
 
