@@ -8,9 +8,16 @@ from simplex_noise import snoise
 
 from random_interpolator import RandomInterpolator
 from parameters import (
-    angs,
+    num_points,
+    ang_reso,
     form_span,
     form_list,
+    formfreq_span,
+    formfreq_list,
+    add_span,
+    add_list,
+    mul_span,
+    mul_list,
     bgseed_span,
     bgseed_list,
     bgfreq_span,
@@ -19,6 +26,24 @@ from parameters import (
 
 rng = np.random.default_rng(1312)
 
+
+formfreqInterpolator = RandomInterpolator(
+    formfreq_span,
+    formfreq_list,
+    0.3,
+)
+
+addInterpolator = RandomInterpolator(
+    add_span,
+    add_list,
+    4,
+)
+
+mulInterpolator = RandomInterpolator(
+    mul_span,
+    mul_list,
+    4,
+)
 
 formInterpolator = RandomInterpolator(
     form_span,
@@ -54,7 +79,7 @@ def func(coords, seed=141):
     res = snoise(
         _coords,
         octaves=6,
-        frequency=1/200,
+        frequency=formfreqInterpolator.get(),
         seed=seed,
     )
     res /= np.max(np.abs(res))
@@ -126,9 +151,9 @@ class MyGame(arcade.Window):
             (0, 0, 0, 0),
         )
 
-        self.line = np.zeros((2, len(angs)))
+        self.line = np.zeros((2, ang_reso))
 
-        self.pointcloud = PointCloud(5000)
+        self.pointcloud = PointCloud(num_points)
 
     def on_draw(self):
 
@@ -145,10 +170,15 @@ class MyGame(arcade.Window):
             2,
         )
 
+        arcade.draw_points(
+            self.line.T[::50],
+            arcade.color.WHITE,
+            10,
+        )
         arcade.draw_line_strip(
             self.line.T,
             arcade.color.WHITE,
-            10,
+            2,
         )
 
     def on_key_press(self, key, modifiers):
@@ -168,15 +198,23 @@ class MyGame(arcade.Window):
         global now
         now = time.time() - starttime
         formInterpolator.update(delta_time)
+        addInterpolator.update(delta_time)
         bgseedInterpolator.update(delta_time)
         bgfreqInterpolator.update(delta_time)
 
         arg = np.round(now, 2)
-
+        ang = arg / 20 * np.ones(self.line.shape[1])
+        rotmat = np.array(
+            [
+                [np.cos(ang), np.sin(ang)],
+                [-np.sin(ang), np.cos(ang)],
+            ]
+        )
         rad = np.array(
             [
-                np.cos(arg / 20) * np.ones(self.line.shape[1]),
-                1 + 1 * func(self.line),
+                np.ones(ang_reso),
+                addInterpolator.get()
+                + mulInterpolator.get() * func(self.line),
             ],
         )
         # rad = 1.
@@ -188,7 +226,11 @@ class MyGame(arcade.Window):
             ]
         )
 
-        self.line = scale * rad * formInterpolator.get() + offset[:, None]
+        self.line = np.einsum(
+            'ijk, jk->ik',
+            scale * rotmat,
+            rad,
+         ) * formInterpolator.get() + offset[:, None]
 
         self.pointcloud.coords += \
             grad(self.pointcloud.get_coords(width, height)) * delta_time
