@@ -29,9 +29,6 @@ from parameters import (
     bgfreq_list,
 )
 
-import pyaudio
-
-import audioop
 
 rng = np.random.default_rng(1312)
 
@@ -139,30 +136,6 @@ def grad(y, h=1e-2):
     return curl
 
 
-def categorize_audio_freqs(freqs, fft_data):
-    low = mid = high = low_c = mid_c = high_c = 1
-    i = 0
-    for freq in freqs:
-        freq = abs(freq * 11025.0)
-        if freq <= 0:
-            continue
-
-        fftp = fft_data[i].real
-        if freq <= 200 and fftp > low_c:
-            low = freq
-            low_c = fftp
-        elif 200 < freq <= 2000 and fftp > mid_c:
-            mid = freq
-            mid_c = fftp
-        elif 2000 < freq <= 20000 and fftp > high_c:
-            high = freq
-            high_c = fftp
-
-        i = i + 1
-
-    return [[low, mid, high], [low_c, mid_c, high_c]]
-
-
 class PointCloud(object):
     def __init__(self, n=10):
         self.n = n
@@ -175,18 +148,6 @@ class PointCloud(object):
             self.coords * np.array([width, height])[:, None]
             % np.array([width, height])[:, None]
         )
-
-
-CHUNK = 600  # Number of data points to read at a time
-RATE = 44100  # Samples per second
-p = pyaudio.PyAudio()
-stream = p.open(
-    format=pyaudio.paInt16,
-    channels=1,
-    rate=RATE,
-    input=True,
-    frames_per_buffer=CHUNK,
-)
 
 
 class MyGame(arcade.Window):
@@ -314,16 +275,8 @@ class MyGame(arcade.Window):
                 + mulInterpolator.get() * func(self.line),
             ]
         )
-        buffer_data = stream.read(CHUNK)
-        # Calculate the RMS value of each chunk to measure the volume
-        # in real time
-        rms = audioop.rms(buffer_data, 2)
-
-        data = np.frombuffer(buffer_data, dtype=np.int16)
-        # Apply FFT to the audio data to analyze frequency components
-        fft_data = np.fft.fft(data)
-        frequencies = np.fft.fftfreq(len(fft_data), d=0.1)
-        freqs_cat = categorize_audio_freqs(frequencies, fft_data)
+        # XXX READING HERE
+        freqs_cat = [[0, 0, 0], [0, 0, 0]]
 
         low_c = freqs_cat[1][0]
         low_c_norm = np.clip(low_c, None, 6e6) / 6e6
