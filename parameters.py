@@ -2,7 +2,9 @@ import numpy as np
 
 from ngon_polar import ngon_polar
 
-angs = np.linspace(0, 360, 401)
+num_points = 5000
+ang_reso = 1001
+angs = np.linspace(0, 360, ang_reso)
 # -----------------------------------------------------------------------------
 # central shapes
 form_span = 3
@@ -30,6 +32,17 @@ form_list = [
         ]
     )
 ]
+
+
+formfreq_span = 200
+formfreq_list = [1/200, 1/100, 1/500, 1/10]
+
+add_span = 20
+add_list = [1., 0.5, 0.1]
+
+mul_span = 26
+mul_list = [1., 0.5, 0.1]
+
 
 # -----------------------------------------------------------------------------
 # background noise

@@ -11,9 +11,16 @@ import pyaudio
 import audioop
 from random_interpolator import RandomInterpolator
 from parameters import (
-    angs,
+    num_points,
+    ang_reso,
     form_span,
     form_list,
+    formfreq_span,
+    formfreq_list,
+    add_span,
+    add_list,
+    mul_span,
+    mul_list,
     bgseed_span,
     bgseed_list,
     bgfreq_span,
@@ -22,6 +29,24 @@ from parameters import (
 
 rng = np.random.default_rng(1312)
 
+
+formfreqInterpolator = RandomInterpolator(
+    formfreq_span,
+    formfreq_list,
+    0.3,
+)
+
+addInterpolator = RandomInterpolator(
+    add_span,
+    add_list,
+    4,
+)
+
+mulInterpolator = RandomInterpolator(
+    mul_span,
+    mul_list,
+    4,
+)
 
 formInterpolator = RandomInterpolator(
     form_span,
@@ -57,7 +82,7 @@ def func(coords, seed=141):
     res = snoise(
         _coords,
         octaves=6,
-        frequency=1/200,
+        frequency=formfreqInterpolator.get(),
         seed=seed,
     )
     res /= np.max(np.abs(res))
@@ -133,8 +158,8 @@ class PointCloud(object):
         )
 
 CHUNK = 600  # Number of data points to read at a time
-RATE = 22100  # Samples per second
-RMS_THRESHOLD = 100
+RATE = 44100  # Samples per second
+RMS_THRESHOLD = 1000
 p = pyaudio.PyAudio()
 stream = p.open(format=pyaudio.paInt16, channels=1, rate=RATE, input=True, frames_per_buffer=CHUNK)
 
@@ -160,13 +185,13 @@ class MyGame(arcade.Window):
             (0, 0, 0, 0),
         )
 
-        self.line = np.zeros((2, len(angs)))
+        self.line = np.zeros((2, ang_reso))
 
-        self.pointcloud = PointCloud(5000)
+        self.pointcloud = PointCloud(num_points)
 
-        self.mid_line = np.zeros((2, len(angs)))
+        self.mid_line = np.zeros((2, ang_reso))
 
-        self.high_line = np.zeros((2, len(angs)))
+        self.high_line = np.zeros((2, ang_reso))
 
         arcade.enable_timings()
 
@@ -188,6 +213,11 @@ class MyGame(arcade.Window):
             2,
         )
 
+        arcade.draw_points(
+            self.line.T[::50],
+            arcade.color.WHITE,
+            10,
+        )
         arcade.draw_line_strip(
             self.line.T,
             arcade.color.YELLOW,
@@ -218,12 +248,12 @@ class MyGame(arcade.Window):
             self.set_viewport(0, width, 0, height)
 
     def on_update(self, delta_time):
-        print(arcade.get_fps())
         width, height = self.get_size()
         scale = min(width, height) / 6
         global now
         now = time.time() - starttime
         formInterpolator.update(delta_time)
+        addInterpolator.update(delta_time)
         bgseedInterpolator.update(delta_time)
         bgfreqInterpolator.update(delta_time)
 
@@ -232,63 +262,64 @@ class MyGame(arcade.Window):
         buffer_data = stream.read(CHUNK)
         rms = audioop.rms(buffer_data, 2)  # Calculate the RMS value of each chunk to measure the volume in real time
         
-        print(rms)
-        if rms < RMS_THRESHOLD:
-            rms_eval = 0
-            rms_scale = 1
-            low_freq_line_factor_1 = 1
-            low_freq_line_factor_2 = 1
-            low_freq_line_factor_3 = 0.4
-            mid_freq_line_factor_1 = 1
-            mid_freq_line_factor_2 = 1
-            mid_freq_line_factor_3 = 0.4
-            high_freq_line_factor_1 = 1
-            high_freq_line_factor_2 = 1
-            high_freq_line_factor_3 = 0.4
-        else:
+        rms_eval = 0
+        lines_freq_factors = [
+            [1, 1],
+            [1, 1],
+            [1, 1]
+        ]
+        if rms >= RMS_THRESHOLD:
             data = np.frombuffer(buffer_data, dtype=np.int16)
             # Apply FFT to the audio data to analyze frequency components
             fft_data = np.fft.fft(data)
             frequencies = np.fft.fftfreq(len(fft_data), d=0.1)
             freqs_cat = categorize_audio_freqs(frequencies, fft_data)
-
             rms_eval = rms / 1000
-            rms_scale = min(rms_eval, 1)
-            low_freq_line_factor_1 = freqs_cat[0][0] / 100
-            low_freq_line_factor_2 = freqs_cat[1][0] * min(rms_eval, 1)
-            low_freq_line_factor_3 = 0.2
-            mid_freq_line_factor_1 = freqs_cat[0][1] / 100
-            mid_freq_line_factor_2 = freqs_cat[1][1] / 100000 * min(rms_eval, 1)
-            mid_freq_line_factor_3 = 0.2
-            high_freq_line_factor_1 = freqs_cat[0][2] / 1000
-            high_freq_line_factor_2 = freqs_cat[1][2] / 100000 * min(rms_eval, 1)
-            high_freq_line_factor_3 = 0.2
-
+            lines_freq_factors = [
+                [
+                    freqs_cat[0][0] / 100,
+                    freqs_cat[1][0] * min(rms_eval, 1)
+                ],
+                [
+                    freqs_cat[0][1] / 100,
+                    freqs_cat[1][2] / 100000 * min(rms_eval, 1)
+                ],
+                [
+                    freqs_cat[0][2] / 1000,
+                    freqs_cat[1][2] / 100000 * min(rms_eval, 1)
+                ]
+            ]
 
         self.background_color_update = (min((rms_eval * 100), 200), min((rms_eval * 10), 200), min((rms_eval * 10), 200))
 
-        rad = np.array(
-            [
-                np.cos(arg) * np.ones(self.line.shape[1]) * low_freq_line_factor_1,
-                1. + low_freq_line_factor_3 * func(self.line) * low_freq_line_factor_2,
-            ],
-        )
+        lines = [
+            self.line,
+            self.mid_line,
+            self.high_line
+        ]
 
-        rad_mid = np.array(
-            [
-                np.cos(arg) * np.ones(self.mid_line.shape[1]) * mid_freq_line_factor_1,
-                1. + mid_freq_line_factor_3 * func(self.mid_line) * mid_freq_line_factor_2,
-            ],
-        )
+        rads = []
+        i = 0
+        for line in lines:
+            ang = arg / 20 * np.ones(line.shape[1])
+            rads.append(
+                np.array(
+                    [
+                        np.ones(ang_reso) * lines_freq_factors[i][0],
+                        addInterpolator.get()
+                        + mulInterpolator.get() * func(line) * lines_freq_factors[i][1],
+                    ]
+                )
+            )
+            i = i + 1
 
-        rad_high = np.array(
+        rotmat = np.array(
             [
-                np.cos(arg) * np.ones(self.high_line.shape[1]) * high_freq_line_factor_1,
-                1. + high_freq_line_factor_3 * func(self.high_line) * high_freq_line_factor_2,
-            ],
+                [np.cos(ang), np.sin(ang)],
+                [-np.sin(ang), np.cos(ang)],
+            ]
         )
-        # rad = 1.
-
+        
         offset = np.array(
             [
                 width // 2,
@@ -297,12 +328,23 @@ class MyGame(arcade.Window):
         )
         exp = 4
 
+        self.line = np.einsum(
+                'ijk, jk->ik',
+                scale * rotmat,
+                rads[0],
+            ) * formInterpolator.get() + offset[:, None]
         
-        self.line = scale * rad * rms_scale * formInterpolator.get() + offset[:, None] 
-
-        self.mid_line = scale * rad_mid * rms_scale * formInterpolator.get() + offset[:, None]
-
-        self.high_line = scale * rad_high * rms_scale * formInterpolator.get() + offset[:, None]
+        self.mid_line = np.einsum(
+                'ijk, jk->ik',
+                scale * rotmat,
+                rads[1],
+            ) * formInterpolator.get() + offset[:, None]
+        
+        self.high_line = np.einsum(
+                'ijk, jk->ik',
+                scale * rotmat,
+                rads[2],
+            ) * formInterpolator.get() + offset[:, None]
 
         self.pointcloud.coords += \
             grad(self.pointcloud.get_coords(width, height)) * delta_time
