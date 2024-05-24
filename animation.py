@@ -133,7 +133,8 @@ class PointCloud(object):
         )
 
 CHUNK = 600  # Number of data points to read at a time
-RATE = 44100  # Samples per second
+RATE = 22100  # Samples per second
+RMS_THRESHOLD = 100
 p = pyaudio.PyAudio()
 stream = p.open(format=pyaudio.paInt16, channels=1, rate=RATE, input=True, frames_per_buffer=CHUNK)
 
@@ -153,6 +154,8 @@ class MyGame(arcade.Window):
         self.set_viewport(0, width, 0, height)
         self.set_vsync(True)
 
+        self.background_color_update = (0, 0, 0, 0)
+
         arcade.set_background_color(
             (0, 0, 0, 0),
         )
@@ -170,7 +173,9 @@ class MyGame(arcade.Window):
 
     def on_draw(self):
 
-        self.clear()
+        self.clear(
+            self.background_color_update
+        )
 
         # Get viewport dimensions
         left, screen_width, bottom, screen_height = self.get_viewport()
@@ -225,42 +230,61 @@ class MyGame(arcade.Window):
         arg = np.round(now, 2)
 
         buffer_data = stream.read(CHUNK)
-
         rms = audioop.rms(buffer_data, 2)  # Calculate the RMS value of each chunk to measure the volume in real time
-
-        data = np.frombuffer(buffer_data, dtype=np.int16)
-        # Apply FFT to the audio data to analyze frequency components
-        fft_data = np.fft.fft(data)
-        frequencies = np.fft.fftfreq(len(fft_data), d=0.1)
-        freqs_cat = categorize_audio_freqs(frequencies, fft_data)
-
-        if rms < 500:
+        
+        print(rms)
+        if rms < RMS_THRESHOLD:
             rms_eval = 0
+            rms_scale = 1
+            low_freq_line_factor_1 = 1
+            low_freq_line_factor_2 = 1
+            low_freq_line_factor_3 = 0.4
+            mid_freq_line_factor_1 = 1
+            mid_freq_line_factor_2 = 1
+            mid_freq_line_factor_3 = 0.4
+            high_freq_line_factor_1 = 1
+            high_freq_line_factor_2 = 1
+            high_freq_line_factor_3 = 0.4
         else:
-            rms_eval = rms / 1000
+            data = np.frombuffer(buffer_data, dtype=np.int16)
+            # Apply FFT to the audio data to analyze frequency components
+            fft_data = np.fft.fft(data)
+            frequencies = np.fft.fftfreq(len(fft_data), d=0.1)
+            freqs_cat = categorize_audio_freqs(frequencies, fft_data)
 
-        arcade.set_background_color(
-            (min((rms_eval * 100), 200), min((rms_eval * 10), 200), min((rms_eval * 10), 200))
-        )
+            rms_eval = rms / 1000
+            rms_scale = min(rms_eval, 1)
+            low_freq_line_factor_1 = freqs_cat[0][0] / 100
+            low_freq_line_factor_2 = freqs_cat[1][0] * min(rms_eval, 1)
+            low_freq_line_factor_3 = 0.2
+            mid_freq_line_factor_1 = freqs_cat[0][1] / 100
+            mid_freq_line_factor_2 = freqs_cat[1][1] / 100000 * min(rms_eval, 1)
+            mid_freq_line_factor_3 = 0.2
+            high_freq_line_factor_1 = freqs_cat[0][2] / 1000
+            high_freq_line_factor_2 = freqs_cat[1][2] / 100000 * min(rms_eval, 1)
+            high_freq_line_factor_3 = 0.2
+
+
+        self.background_color_update = (min((rms_eval * 100), 200), min((rms_eval * 10), 200), min((rms_eval * 10), 200))
 
         rad = np.array(
             [
-                np.cos(arg) * np.ones(self.line.shape[1]) * (freqs_cat[0][0] / 100),
-                1. + 0.2 * func(self.line) * (freqs_cat[1][0]),
+                np.cos(arg) * np.ones(self.line.shape[1]) * low_freq_line_factor_1,
+                1. + low_freq_line_factor_3 * func(self.line) * low_freq_line_factor_2,
             ],
         )
 
         rad_mid = np.array(
             [
-                np.cos(arg) * np.ones(self.mid_line.shape[1]) * (freqs_cat[0][1] / 100),
-                1. + 0.2 * func(self.mid_line) * (freqs_cat[1][1] / 100000),
+                np.cos(arg) * np.ones(self.mid_line.shape[1]) * mid_freq_line_factor_1,
+                1. + mid_freq_line_factor_3 * func(self.mid_line) * mid_freq_line_factor_2,
             ],
         )
 
         rad_high = np.array(
             [
-                np.cos(arg) * np.ones(self.high_line.shape[1]) * (freqs_cat[0][2] / 1000),
-                1. + 0.2 * func(self.high_line) * (freqs_cat[1][2] / 100000),
+                np.cos(arg) * np.ones(self.high_line.shape[1]) * high_freq_line_factor_1,
+                1. + high_freq_line_factor_3 * func(self.high_line) * high_freq_line_factor_2,
             ],
         )
         # rad = 1.
@@ -272,9 +296,7 @@ class MyGame(arcade.Window):
             ]
         )
         exp = 4
-        rms_scale = min(rms_eval, 0.9)
-        if rms_eval == 0:
-            rms_scale = 0.1
+
         
         self.line = scale * rad * rms_scale * formInterpolator.get() + offset[:, None] 
 
