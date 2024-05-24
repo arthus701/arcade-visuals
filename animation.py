@@ -9,52 +9,91 @@ from simplex_noise import snoise
 import pyaudio
 
 import audioop
+from random_interpolator import RandomInterpolator
+from parameters import (
+    angs,
+    form_span,
+    form_list,
+    bgseed_span,
+    bgseed_list,
+    bgfreq_span,
+    bgfreq_list,
+)
 
 rng = np.random.default_rng(1312)
 
 
-def func(coords, seed=9999, freq=0.005):
-    global TIME
+formInterpolator = RandomInterpolator(
+    form_span,
+    form_list,
+    4,
+)
+
+bgseedInterpolator = RandomInterpolator(
+    bgseed_span,
+    bgseed_list,
+    0,
+)
+
+bgfreqInterpolator = RandomInterpolator(
+    bgfreq_span,
+    bgfreq_list,
+    0.3,
+)
+
+starttime = time.time()
+now = 0
+
+
+def func(coords, seed=141):
+    global now
 
     _coords = np.vstack(
         (
             coords,
-            TIME * np.ones((1, coords.shape[1])) * 100,
+            now * np.ones((1, coords.shape[1])) * 100,
         ),
     )
     res = snoise(
         _coords,
         octaves=6,
-        frequency=1 / 200,
+        frequency=1/200,
         seed=seed,
     )
     res /= np.max(np.abs(res))
     return (res + 1) / 2
 
 
-def ngon_polar(ang, angs):
-    # n_points = 3
+def curl_func(coords):
+    res = 1 * snoise(
+        coords,
+        octaves=4,
+        frequency=bgfreqInterpolator.get(),
+        seed=int(bgseedInterpolator.get()),
+    )
+    return res
 
-    _angs = np.hstack(
+
+def grad(y, h=1e-2):
+    ret = np.zeros((2, y.shape[1]))
+    vec = np.zeros((3, y.shape[1]))
+    vec[:2] = y
+
+    for it in range(2):
+        dir = np.zeros(3)
+        dir[it] = 1.
+
+        pfield = curl_func((vec + dir[:, None] * h))
+        nfield = curl_func((vec - dir[:, None] * h))
+        ret[it] = ((pfield - nfield) / (2 * h))
+
+    curl = np.array(
         [
-            # angs[0],
-            angs,
-            360 + angs[0],
-            # 360 + angs[0],
-        ]
-    )
-    points = np.array(
-        [
-            np.cos(np.deg2rad(_angs)),
-            np.sin(np.deg2rad(_angs)),
-        ]
-    )
-    return np.array(
-        [
-            np.interp(ang, _angs, points[0]),
-            np.interp(ang, _angs, points[1]),
+            ret[1],
+            -ret[0],
         ],
     )
+    return curl
 
 def categorize_audio_freqs(freqs, fft_data):
     low = mid = high = low_c = mid_c = high_c = 1
@@ -80,45 +119,18 @@ def categorize_audio_freqs(freqs, fft_data):
     return [[low, mid, high], [low_c, mid_c, high_c]]
 
 
-TIME = 0
-INTERPOLATE_TIME = 0
-STARTTIME = time.time()
+class PointCloud(object):
+    def __init__(self, n=10):
+        self.n = n
 
-INTERPOLATE_SPAN = 3
-ANGS = np.linspace(0, 360, 401)
-SCALE = 200
+        self.coords = rng.uniform(size=(2, self.n))
+        self.colors = rng.integers(low=0, high=255, size=(3, self.n))
 
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
-SCREEN_TITLE = "Full Screen Example"
-
-# How many pixels to keep as a minimum margin between the character
-# and the edge of the screen.
-MOVEMENT_SPEED = 5
-
-form_1 = [
-    0,
-    150,
-    270,
-]
-
-form_2 = [
-    0,
-    90,
-    180,
-    270,
-]
-
-formlist = [
-    ngon_polar(ANGS, form_1),
-    ngon_polar(ANGS, form_2),
-    np.array(
-        [
-            np.cos(np.deg2rad(ANGS)),
-            np.sin(np.deg2rad(ANGS)),
-        ]
-    )
-]
+    def get_coords(self, width, height):
+        return (
+            self.coords * np.array([width, height])[:, None]
+            % np.array([width, height])[:, None]
+        )
 
 CHUNK = 600  # Number of data points to read at a time
 RATE = 44100  # Samples per second
@@ -129,65 +141,47 @@ class MyGame(arcade.Window):
     """ Main application class. """
 
     def __init__(self):
-        """
-        Initializer
-        """
-        # Open a window in full screen mode. Remove fullscreen=True if
-        # you don't want to start this way.
         super().__init__(
-            SCREEN_WIDTH,
-            SCREEN_HEIGHT,
-            SCREEN_TITLE,
+            800,
+            600,
+            "Animation",
             fullscreen=False,
             vsync=True,
         )
 
-        # This will get the size of the window, and set the viewport to match.
-        # So if the window is 1000x1000, then so will our viewport. If
-        # you want something different, then use those coordinates instead.
         width, height = self.get_size()
         self.set_viewport(0, width, 0, height)
         self.set_vsync(True)
 
         arcade.set_background_color(
-            # (100, 0, 200, 100),
             (0, 0, 0, 0),
         )
 
-        self.new_form = formlist[0]
-        self.old_form = self.new_form.copy()
+        self.line = np.zeros((2, len(angs)))
 
-        self.line = np.zeros((2, len(ANGS)))
+        self.pointcloud = PointCloud(5000)
 
-        self.mid_line = np.zeros((2, len(ANGS)))
+        self.mid_line = np.zeros((2, len(angs)))
 
-        self.high_line = np.zeros((2, len(ANGS)))
+        self.high_line = np.zeros((2, len(angs)))
 
         arcade.enable_timings()
 
 
     def on_draw(self):
-        """
-        Render the screen.
-        """
 
-        self.clear(
-            # (100, 0, 200, 100)
-        )
+        self.clear()
 
         # Get viewport dimensions
         left, screen_width, bottom, screen_height = self.get_viewport()
 
-        # text_size = 18
-        # Draw text on the screen so the user has an idea of what is happening
-        # arcade.draw_text(
-        #     "Press F to toggle between full screen and "
-        #     "windowed mode, unstretched.",
-        #     screen_width // 2, screen_height // 2 - 20,
-        #     arcade.color.WHITE, text_size, anchor_x="center"
-        #     )
-
         width, height = self.get_size()
+
+        arcade.draw_points(
+            self.pointcloud.get_coords(width=width, height=height).T,
+            (255, 255, 255, 255),
+            2,
+        )
 
         arcade.draw_line_strip(
             self.line.T,
@@ -221,18 +215,14 @@ class MyGame(arcade.Window):
     def on_update(self, delta_time):
         print(arcade.get_fps())
         width, height = self.get_size()
-        global TIME, INTERPOLATE_TIME, INTERPOLATE_SPAN
-        TIME = time.time() - STARTTIME
-        # if TIME %
-        INTERPOLATE_TIME += delta_time / INTERPOLATE_SPAN
-        if 1. < INTERPOLATE_TIME:
-            INTERPOLATE_TIME -= 1
-            self.old_form = self.new_form.copy()
-            idx = rng.integers(len(formlist))
-            # print(idx)
-            self.new_form = formlist[idx]
+        scale = min(width, height) / 6
+        global now
+        now = time.time() - starttime
+        formInterpolator.update(delta_time)
+        bgseedInterpolator.update(delta_time)
+        bgfreqInterpolator.update(delta_time)
 
-        arg = np.round(TIME, 2)
+        arg = np.round(now, 2)
 
         buffer_data = stream.read(CHUNK)
 
@@ -286,21 +276,14 @@ class MyGame(arcade.Window):
         if rms_eval == 0:
             rms_scale = 0.1
         
-        self.line = SCALE * rad * rms_scale * (
-            (1 - INTERPOLATE_TIME**exp) * self.old_form
-            + INTERPOLATE_TIME**exp * self.new_form
-        ) + offset[:, None] 
+        self.line = scale * rad * rms_scale * formInterpolator.get() + offset[:, None] 
 
-        self.mid_line = SCALE * rad_mid * rms_scale * (
-            (1 - INTERPOLATE_TIME**exp) * self.old_form
-            + INTERPOLATE_TIME**exp * self.new_form
-        ) + offset[:, None]
+        self.mid_line = scale * rad_mid * rms_scale * formInterpolator.get() + offset[:, None]
 
-        self.high_line = SCALE * rad_high * rms_scale * (
-            (1 - INTERPOLATE_TIME**exp) * self.old_form
-            + INTERPOLATE_TIME**exp * self.new_form
-        ) + offset[:, None]
+        self.high_line = scale * rad_high * rms_scale * formInterpolator.get() + offset[:, None]
 
+        self.pointcloud.coords += \
+            grad(self.pointcloud.get_coords(width, height)) * delta_time
 
 def main():
     """ Main function """
