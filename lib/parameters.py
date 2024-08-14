@@ -1,6 +1,6 @@
 import numpy as np
 
-from ngon_polar import ngon_polar
+from lib.ngon_polar import ngon_polar
 
 num_points = 5000
 ang_reso = 1001
@@ -21,18 +21,6 @@ form_2 = [
     180,
     270,
 ]
-
-form_list = [
-    ngon_polar(angs, form_1),
-    ngon_polar(angs, form_2),
-    np.array(
-        [
-            np.cos(np.deg2rad(angs)),
-            np.sin(np.deg2rad(angs)),
-        ]
-    )
-]
-
 
 formfreq_span = 200
 formfreq_list = [1/200, 1/100, 1/500, 1/10]
@@ -77,3 +65,5 @@ bgseed_list = [
 
 bgfreq_span = 200
 bgfreq_list = [1/200, 1/100, 1/500, 1/10]
+
+ang_arg_div = 20

@@ -1,160 +1,91 @@
 import arcade
-import socket
 import time
-import json
+import argparse
 
 import numpy as np
 
 from simplex_noise import snoise
 
+from lib.audio_client import AudioClient
+from lib.parameters_client import (ParametersClient, default_parameters)
+from lib.ngon_polar import ngon_polar
+from lib.point_cloud import PointCloud
+from lib.random_interpolator import RandomInterpolator
+from lib.utils import (func, grad)
 
-from random_interpolator import RandomInterpolator
-from parameters import (
-    num_points,
-    ang_reso,
-    form_span,
-    form_list,
-    formfreq_span,
-    formfreq_list,
-    add_span,
-    add_list,
-    mul_span,
-    mul_list,
-    bgcolor_span,
-    bgcolor_list,
-    bgtail_span,
-    bgtail_list,
-    bgseed_span,
-    bgseed_list,
-    bgfreq_span,
-    bgfreq_list,
-)
+# parse cli args
+parser = argparse.ArgumentParser()
+parser.add_argument('--audio_client_port', type=int, default=46498)
+parser.add_argument('--parameters_client_port', type=int, default=46499)
 
+args = parser.parse_args()
 
+# initialize Random Interpolators
 rng = np.random.default_rng(1312)
 
+form_list = lambda params: [
+    ngon_polar(params.angs, params.form_1),
+    ngon_polar(params.angs, params.form_2),
+    np.array(
+        [
+            np.cos(np.deg2rad(params.angs)),
+            np.sin(np.deg2rad(params.angs)),
+        ]
+    )
+]
 
 formfreqInterpolator = RandomInterpolator(
-    formfreq_span,
-    formfreq_list,
+    default_parameters.formfreq_span,
+    default_parameters.formfreq_list,
     0.3,
 )
 
 addInterpolator = RandomInterpolator(
-    add_span,
-    add_list,
+    default_parameters.add_span,
+    default_parameters.add_list,
     4,
 )
 
 mulInterpolator = RandomInterpolator(
-    mul_span,
-    mul_list,
+    default_parameters.mul_span,
+    default_parameters.mul_list,
     4,
 )
 
 formInterpolator = RandomInterpolator(
-    form_span,
-    form_list,
+    default_parameters.form_span,
+    form_list(default_parameters),
     4,
 )
 
 bgcolorInterpolator = RandomInterpolator(
-    bgcolor_span,
-    bgcolor_list,
+    default_parameters.bgcolor_span,
+    default_parameters.bgcolor_list,
     1,
 )
 
 bgtailInterpolator = RandomInterpolator(
-    bgtail_span,
-    bgtail_list,
+    default_parameters.bgtail_span,
+    default_parameters.bgtail_list,
     0.5,
 )
 
 bgseedInterpolator = RandomInterpolator(
-    bgseed_span,
-    bgseed_list,
+    default_parameters.bgseed_span,
+    default_parameters.bgseed_list,
     0,
 )
 
 bgfreqInterpolator = RandomInterpolator(
-    bgfreq_span,
-    bgfreq_list,
+    default_parameters.bgfreq_span,
+    default_parameters.bgfreq_list,
     0.3,
 )
 
 starttime = time.time()
 now = 0
 
-
-def func(coords, seed=141):
-    global now
-
-    _coords = np.vstack(
-        (
-            coords,
-            now * np.ones((1, coords.shape[1])) * 100,
-        ),
-    )
-    res = snoise(
-        _coords,
-        octaves=6,
-        frequency=formfreqInterpolator.get(),
-        seed=seed,
-    )
-    res /= np.max(np.abs(res))
-    return (res + 1) / 2
-
-
-def curl_func(coords):
-    res = 1 * snoise(
-        coords,
-        octaves=4,
-        frequency=bgfreqInterpolator.get(),
-        seed=int(bgseedInterpolator.get()),
-    )
-    return res
-
-
-def grad(y, h=1e-2):
-    ret = np.zeros((2, y.shape[1]))
-    vec = np.zeros((3, y.shape[1]))
-    vec[:2] = y
-
-    for it in range(2):
-        dir = np.zeros(3)
-        dir[it] = 1.
-
-        pfield = curl_func((vec + dir[:, None] * h))
-        nfield = curl_func((vec - dir[:, None] * h))
-        ret[it] = ((pfield - nfield) / (2 * h))
-
-    curl = np.array(
-        [
-            ret[1],
-            -ret[0],
-        ],
-    )
-    return curl
-
-
-class PointCloud(object):
-    def __init__(self, n=10):
-        self.n = n
-
-        self.coords = rng.uniform(size=(2, self.n))
-        self.colors = rng.integers(low=0, high=255, size=(3, self.n))
-
-    def get_coords(self, width, height):
-        return (
-            self.coords * np.array([width, height])[:, None]
-            % np.array([width, height])[:, None]
-        )
-
-
-PORT = 46498
-
-
-class MyGame(arcade.Window):
+class Visuals(arcade.Window):
     """ Main application class. """
 
     def __init__(self):
@@ -166,12 +97,9 @@ class MyGame(arcade.Window):
             vsync=True,
         )
 
-        self.socket = socket.socket(
-            socket.AF_INET,
-            socket.SOCK_DGRAM,
-        )
-        self.socket.bind(("0.0.0.0", PORT))
-        self.socket.setblocking(0)
+        self.audio_client = AudioClient("0.0.0.0", args.audio_client_port, 1024)
+        self.parameters_client = ParametersClient("0.0.0.0", args.parameters_client_port, 1024)
+        self.parameters = self.parameters_client.update()
 
         width, height = self.get_size()
         self.set_viewport(0, width, 0, height)
@@ -180,13 +108,13 @@ class MyGame(arcade.Window):
             (0, 0, 0, 0),
         )
 
-        self.line = np.zeros((2, ang_reso))
+        self.line = np.zeros((2, self.parameters.ang_reso))
 
-        self.mid_line = np.zeros((2, ang_reso))
+        self.mid_line = np.zeros((2, self.parameters.ang_reso))
 
-        self.high_line = np.zeros((2, ang_reso))
+        self.high_line = np.zeros((2, self.parameters.ang_reso))
 
-        self.pointcloud = PointCloud(num_points)
+        self.pointcloud = PointCloud(rng, self.parameters.num_points)
 
         buffersize = 3
         self.low_buffer = np.zeros(buffersize)
@@ -275,7 +203,7 @@ class MyGame(arcade.Window):
         bgfreqInterpolator.update(delta_time)
 
         arg = np.round(now, 2)
-        ang = arg / 20 * np.ones(self.line.shape[1])
+        ang = arg / self.parameters.ang_arg_div * np.ones(self.line.shape[1])
         rotmat = np.array(
             [
                 [np.cos(ang), np.sin(ang)],
@@ -284,20 +212,16 @@ class MyGame(arcade.Window):
         )
         rad = np.array(
             [
-                np.ones(ang_reso),
+                np.ones(self.parameters.ang_reso),
                 addInterpolator.get()
-                + mulInterpolator.get() * func(self.line),
+                + mulInterpolator.get() 
+                * func(self.line, now, formfreqInterpolator.get()),
             ]
         )
+
         # XXX READING HERE
         try:
-            while True:
-                raw_data = self.socket.recv(1024)
-        except BlockingIOError:
-            pass
-
-        try:
-            data = json.loads(raw_data)
+            data = self.audio_client.update()
 
             low_c = data['low_peak']['amp']
             low_c_norm = np.clip(low_c, None, 6e6) / 6e6
@@ -329,7 +253,7 @@ class MyGame(arcade.Window):
 
         rms_val = self.rms_buffer.mean()
 
-        rad_mid = rms_val * 400 + np.mean(self.mid_buffer) * 100
+        rad_mid = rms_val * 400 + np.mean(self.mid_buffer) * 200
         rad_high = rms_val * 10 + np.mean(self.high_buffer) * 4
 
         # rad = 1.
@@ -350,20 +274,25 @@ class MyGame(arcade.Window):
         self.line = line + offset[:, None]
 
         self.pointcloud.coords += \
-            grad(self.pointcloud.get_coords(width, height)) * delta_time
+            grad(self.pointcloud.get_coords(width, height), bgfreqInterpolator.get(), bgseedInterpolator.get()) \
+            * delta_time
 
         self.mid_line = (1 + rad_mid) * line + offset[:, None]
         self.high_line = (1 - rad_high) * line + offset[:, None]
 
-        # self.high_line = (
-        #     scale * rad_high * rms_scale * formInterpolator.get()
-        #     + offset[:, None]
-        # )
+        ### Update Parameters
+        self.parameters = self.parameters_client.update()
+        
+        self.pointcloud.n = self.parameters.num_points
+        formInterpolator.span = self.parameters.form_span
+        formInterpolator.statelist = form_list(self.parameters)
+
+        print(self.parameters.num_points)
 
 
 def main():
     """ Main function """
-    MyGame()
+    Visuals()
     arcade.run()
 
 
