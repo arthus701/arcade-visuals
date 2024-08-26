@@ -1,0 +1,4 @@
+[alias]
+run-controlpad = ["run", "--features", "controlpad", "--bin", "controlpad"]
+run-animation = ["run", "--features", "animation", "--bin", "animation"]
+run-audio = ["run", "--features", "audio", "--bin", "audio"]
