@@ -3,6 +3,7 @@ import numpy as np
 import arcade
 from simplex_noise import snoise
 from random_interpolator import RandomInterpolator
+from state import State
 
 from parameters import (
     bgseed_span,
@@ -58,7 +59,7 @@ def grad(y, h=1e-2):
     return curl
 
 
-class PointCloud(object):
+class PointCloud(State):
     def __init__(self, n=10):
         self.n = n
 

@@ -12,6 +12,7 @@ from random_interpolator import RandomInterpolator
 
 from sun import Sun
 from pointcloud import PointCloud
+from state import InitialState
 
 from parameters import (
     num_points,
@@ -135,7 +136,7 @@ class MyGame(arcade.Window):
 
         self.rms_buffer = np.zeros(buffersize)
 
-        self.state = PointCloud(num_points)
+        self.state = InitialState()
 
         arcade.enable_timings()
 

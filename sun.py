@@ -5,6 +5,7 @@ from PIL import Image
 from matplotlib import cm
 
 from simplex_noise import snoise
+from state import State
 
 
 def func(coords, seed=161312, z=0):
@@ -48,7 +49,7 @@ def func(coords, seed=161312, z=0):
     return res
 
 
-class Sun(object):
+class Sun(State):
     def __init__(self, extent, subsamp=10):
         self.width, self.height = arcade.get_window().get_size()
         self.extent = (0, 0, self.width, self.height)
