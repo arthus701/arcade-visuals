@@ -20,7 +20,7 @@ def func(coords, seed=161312, z=0, exp=1):
     res = (
         snoise(
             _coords,
-            octaves=4,
+            octaves=3,
             frequency=4,
             seed=seed,
         ),
@@ -40,7 +40,7 @@ def func(coords, seed=161312, z=0, exp=1):
             (
                 (_coords[0])**2 + (_coords[1])**2
             ) / .1
-        )**6.2
+        )**(3 + 3.2*exp)
     )
 
     # res -= res.min()
@@ -153,7 +153,7 @@ class Sun(State):
         self.vals = func(
             self.xy_grid,
             z=0.05*arg,
-            exp=1 + exp_add,
+            exp=exp_add,
         ).reshape(self.n_x, self.n_y)
 
         self.image = Image.fromarray(
@@ -162,4 +162,4 @@ class Sun(State):
         )
         self.texture.image = self.image
 
-        self.glow_max = np.clip(self.glow_max - 0.01, 0.5, 1.)
+        self.glow_max = np.clip(self.glow_max - 0.05, 0.5, 1.)
