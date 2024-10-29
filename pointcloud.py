@@ -7,7 +7,7 @@ from state import State
 
 from background import bgcolorInterpolator, bgtailInterpolator
 
-bgseed_span = 30
+
 bgseed_list = [
     66359,  23802,  72212,  87422,  93711,  60901, 102507,  86383,
     85871,  29174,  67382,  31268,  49904,  46217,  36448,   4085,
@@ -24,18 +24,15 @@ bgseed_list = [
     100148,  14988,  76259,  53729,
 ]
 
-bgfreq_span = 200
-bgfreq_list = [1/200, 1/100, 1/500, 1/10]
-
 seedInterpolator = RandomInterpolator(
-    bgseed_span,
+    30,
     bgseed_list,
     0,
 )
 
 freqInterpolator = RandomInterpolator(
-    bgfreq_span,
-    bgfreq_list,
+    200,
+    [1/200, 1/100, 1/500, 1/10],
     0.3,
 )
 
