@@ -8,7 +8,7 @@ from simplex_noise import snoise
 from state import State
 
 
-def func(coords, seed=161312, z=0):
+def func(coords, seed=161312, z=0, exp=1):
     _coords = coords.T
     _coords = np.vstack(
         (
@@ -17,16 +17,19 @@ def func(coords, seed=161312, z=0):
         ),
     )
 
-    res = snoise(
-        _coords,
-        octaves=4,
-        frequency=4,
-        seed=seed,
-    ) * snoise(
-        _coords,
-        frequency=20,
-        octaves=8,
-        seed=seed+4,
+    res = (
+        snoise(
+            _coords,
+            octaves=4,
+            frequency=4,
+            seed=seed,
+        ),
+        #  * snoise(
+        #    _coords,
+        #    frequency=20,
+        #    octaves=8,
+        #    seed=seed+4,
+        # )
     )
 
     # res -= res.min()
@@ -53,6 +56,9 @@ class Sun(State):
     def __init__(self, extent, subsamp=10):
         self.width, self.height = arcade.get_window().get_size()
         self.extent = (0, 0, self.width, self.height)
+
+        self.glow_max = 0.8
+
         X, Y = np.meshgrid(
             1.*np.arange(
                 self.width+subsamp,
@@ -110,10 +116,10 @@ class Sun(State):
             self.sprite
         )
 
-    def update_window(self, width, height):
+    def update_window(self, width, height, **kwargs):
         pass
 
-    def draw(self, width, height):
+    def draw(self, width, height, **kwargs):
         self.sprite_list.draw(pixelated=True)
         # self.sprite.draw()
         # arcade.draw_texture_rectangle(
@@ -125,16 +131,35 @@ class Sun(State):
         # )
         self.texture_atlas.update_texture_image(self.texture)
 
-    def update(self, elapsed_time, delta_time):
+    def update(self, elapsed_time, delta_time, **kwargs):
+        if 'rms_buffer' in kwargs:
+            rms_buffer = kwargs.get('rms_buffer')
+            exp_add = 1 - np.clip(
+                10 * (
+                    (np.max(rms_buffer[:3]) - np.mean(rms_buffer[:3]))
+                    / (np.max(rms_buffer) + 1e-10)
+                ),
+                None,
+                1,
+            )
+        else:
+            exp_add = 0
+        if 'kick' in kwargs:
+            kick = kwargs.get('kick')
+            if kick:
+                self.glow_max += 0.5
+
         arg = np.round(elapsed_time, 2)
-        self.vals = func(self.xy_grid, z=0.05*arg).reshape(self.n_x, self.n_y)
+        self.vals = func(
+            self.xy_grid,
+            z=0.05*arg,
+            exp=1 + exp_add,
+        ).reshape(self.n_x, self.n_y)
 
         self.image = Image.fromarray(
             # np.uint8(255 * self.vals).T,
-            np.uint8(cm.magma(self.vals.T)*255),
+            np.uint8(cm.magma(self.vals.T * self.glow_max) * 255),
         )
         self.texture.image = self.image
-        try:
-            pass
-        except KeyError:
-            pass
+
+        self.glow_max = np.clip(self.glow_max - 0.01, 0.5, 1.)
