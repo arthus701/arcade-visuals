@@ -8,7 +8,7 @@ from state import State
 from background import bgcolorInterpolator, bgtailInterpolator
 
 
-bgseed_list = [
+seed_list = [
     66359,  23802,  72212,  87422,  93711,  60901, 102507,  86383,
     85871,  29174,  67382,  31268,  49904,  46217,  36448,   4085,
     83402, 100324,  38140,  45713,  43896,  16853,  86778,   3440,
@@ -26,7 +26,7 @@ bgseed_list = [
 
 seedInterpolator = RandomInterpolator(
     30,
-    bgseed_list,
+    seed_list,
     0,
 )
 
