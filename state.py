@@ -14,7 +14,7 @@ class State(object):
     def update_window(self, *args, **kwargs):
         pass
 
-    def draw(self, elapsed_time, delta_time, **kwargs):
+    def draw(self, width, height, **kwargs):
         pass
 
 
@@ -56,7 +56,8 @@ class InitialState(State):
         arcade.draw_text(
             "Select state using the number keys.\n"
             "1: Sun\n"
-            "2: Point cloud",
+            "2: Point cloud\n"
+            "3: Ferris",
             0,
             2*height//3,
             width=width,
