@@ -25,10 +25,6 @@ from parameters import (
     add_list,
     mul_span,
     mul_list,
-    bgcolor_span,
-    bgcolor_list,
-    bgtail_span,
-    bgtail_list,
 )
 
 
@@ -57,18 +53,6 @@ formInterpolator = RandomInterpolator(
     form_span,
     form_list,
     4,
-)
-
-bgcolorInterpolator = RandomInterpolator(
-    bgcolor_span,
-    bgcolor_list,
-    1,
-)
-
-bgtailInterpolator = RandomInterpolator(
-    bgtail_span,
-    bgtail_list,
-    0.5,
 )
 
 
@@ -129,7 +113,7 @@ class MyGame(arcade.Window):
 
         self.high_line = np.zeros((2, ang_reso))
 
-        buffersize = 3
+        buffersize = 20
         self.low_buffer = np.zeros(buffersize)
         self.mid_buffer = np.zeros(buffersize)
         self.high_buffer = np.zeros(buffersize)
@@ -137,6 +121,7 @@ class MyGame(arcade.Window):
         self.rms_buffer = np.zeros(buffersize)
 
         self.state = InitialState()
+        self.kick = False
 
         arcade.enable_timings()
 
@@ -148,20 +133,6 @@ class MyGame(arcade.Window):
         left, screen_width, bottom, screen_height = self.get_viewport()
 
         width, height = self.get_size()
-
-        bgcolor = bgcolorInterpolator.get()
-        arcade.draw_rectangle_filled(
-            width // 2,
-            height // 2,
-            width,
-            height,
-            color=(
-                bgcolor[0] * (0.1 + 0.9 * self.background_intensity),
-                bgcolor[1] * (0.1 + 0.9 * self.background_intensity),
-                bgcolor[2] * (0.1 + 0.9 * self.background_intensity),
-                bgtailInterpolator.get(),
-            ),
-        )
 
         self.state.draw(width, height)
 
@@ -203,7 +174,11 @@ class MyGame(arcade.Window):
             self.state.update_window(
                 width, height,
             )
+        if key == arcade.key.K:
+            self.kick = True
 
+        if key == arcade.key.KEY_0:
+            self.state = InitialState()
         if key == arcade.key.KEY_1:
             width, height = self.get_size()
             self.reset()
@@ -237,10 +212,9 @@ class MyGame(arcade.Window):
         now = time.time() - starttime
         formInterpolator.update(delta_time)
         addInterpolator.update(delta_time)
-        bgcolorInterpolator.update(delta_time)
 
         arg = np.round(now, 2)
-        self.state.update(now, delta_time)
+
         ang = arg / 20 * np.ones(self.line.shape[1])
         rotmat = np.array(
             [
@@ -269,32 +243,42 @@ class MyGame(arcade.Window):
             low_c = data['low_peak']['amp']
             low_c_norm = np.clip(low_c, None, 6e6) / 6e6
 
-            self.low_buffer[1:] = self.low_buffer[:-1]
+            self.low_buffer[1:] = np.copy(self.low_buffer[:-1])
             self.low_buffer[0] = low_c_norm
 
             mid_c = data['mid_peak']['amp']
             mid_c_norm = np.clip(mid_c, None, 6e6) / 6e6
 
-            self.mid_buffer[1:] = self.mid_buffer[:-1]
+            self.mid_buffer[1:] = np.copy(self.mid_buffer[:-1])
             self.mid_buffer[0] = mid_c_norm
 
             high_c = data['high_peak']['amp']
             high_c_norm = np.clip(high_c, None, 6e6) / 6e6
 
-            self.high_buffer[1:] = self.high_buffer[:-1]
+            self.high_buffer[1:] = np.copy(self.high_buffer[:-1])
             self.high_buffer[0] = high_c_norm
 
             rms = data['rms']
-            rms_norm = np.clip(rms, None, 1e4) / 1e4
+            rms_norm = rms      # np.clip(rms, None, 1e4) / 1e4
 
-            self.rms_buffer[1:] = self.rms_buffer[:-1]
+            self.rms_buffer[1:] = np.copy(self.rms_buffer[:-1])
             self.rms_buffer[0] = rms_norm
         except UnboundLocalError:
             pass
 
-        self.background_intensity = np.mean(self.low_buffer)
+        # print(self.background_intensity)
 
         rms_val = self.rms_buffer.mean()
+
+        self.state.update(
+            now,
+            delta_time,
+            rms_buffer=self.rms_buffer,
+            kick=self.kick,
+        )
+
+        if self.kick:
+            self.kick = False
 
         rad_mid = rms_val * 400 + np.mean(self.mid_buffer) * 100
         rad_high = rms_val * 10 + np.mean(self.high_buffer) * 4
