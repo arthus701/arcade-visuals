@@ -10,9 +10,10 @@ from simplex_noise import snoise
 
 from random_interpolator import RandomInterpolator
 
+from state import InitialState
 from sun import Sun
 from pointcloud import PointCloud
-from state import InitialState
+from ferris import Ferris
 
 from parameters import (
     num_points,
@@ -187,6 +188,8 @@ class MyGame(arcade.Window):
             )
         if key == arcade.key.KEY_2:
             self.state = PointCloud(num_points)
+        if key == arcade.key.KEY_3:
+            self.state = Ferris(10)
 
     def reset(self):
         width, height = self.get_size()
