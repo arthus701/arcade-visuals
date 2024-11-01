@@ -1,0 +1,12 @@
+[package]
+name = "audio_processor"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+audio-processor-analysis = "2.4.0"
+cpal = "0.15.3"
+rustfft = "6.2.0"
+spectrum-analyzer = "1.5.0"
