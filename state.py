@@ -57,7 +57,8 @@ class InitialState(State):
             "Select state using the number keys.\n"
             "1: Sun\n"
             "2: Point cloud\n"
-            "3: Ferris",
+            "3: Ferris\n"
+            "4: Lines",
             0,
             2*height//3,
             width=width,

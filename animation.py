@@ -14,6 +14,7 @@ from state import InitialState
 from sun import Sun
 from pointcloud import PointCloud
 from ferris import Ferris
+from lines import Lines
 
 from parameters import (
     num_points,
@@ -188,8 +189,12 @@ class MyGame(arcade.Window):
             )
         if key == arcade.key.KEY_2:
             self.state = PointCloud(num_points)
+
         if key == arcade.key.KEY_3:
             self.state = Ferris(10)
+
+        if key == arcade.key.KEY_4:
+            self.state = Lines()
 
     def reset(self):
         width, height = self.get_size()
