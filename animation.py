@@ -243,29 +243,31 @@ class MyGame(arcade.Window):
         try:
             data = json.loads(raw_data)
 
-            low_c = data['low_peak']['amp']
+            low_c = data['low_rms']['limited_value']
             low_c_norm = np.clip(low_c, None, 6e6) / 6e6
 
             self.low_buffer[1:] = np.copy(self.low_buffer[:-1])
             self.low_buffer[0] = low_c_norm
 
-            mid_c = data['mid_peak']['amp']
+            mid_c = data['mid_rms']['limited_value']
             mid_c_norm = np.clip(mid_c, None, 6e6) / 6e6
 
             self.mid_buffer[1:] = np.copy(self.mid_buffer[:-1])
             self.mid_buffer[0] = mid_c_norm
 
-            high_c = data['high_peak']['amp']
+            high_c = data['high_rms']['limited_value']
             high_c_norm = np.clip(high_c, None, 6e6) / 6e6
 
             self.high_buffer[1:] = np.copy(self.high_buffer[:-1])
             self.high_buffer[0] = high_c_norm
 
-            rms = data['rms']
+            rms = data['rms']["value"]
             rms_norm = rms      # np.clip(rms, None, 1e4) / 1e4
 
             self.rms_buffer[1:] = np.copy(self.rms_buffer[:-1])
             self.rms_buffer[0] = rms_norm
+
+            self.kick = data['kick'] == 1
         except UnboundLocalError:
             pass
 
