@@ -85,7 +85,6 @@ class Lines(State):
         self.lines -= np.mean(self.lines, axis=1)[:, None]
 
         self.add_z = np.clip(self.add_z - 0.05, 0., None)
-        print(self.add_z)
 
     def draw(self, width, height, **kwargs):
         bgcolor = bgcolorInterpolator.get()
@@ -98,7 +97,7 @@ class Lines(State):
                 0,
                 bgcolor[1],
                 bgcolor[2],
-                255,
+                bgtailInterpolator.get(),
             ),
         )
 
