@@ -22,7 +22,7 @@ class InitialState(State):
     def __init__(self, *args, **kwargs):
         self.background_intensity = 1
 
-    def update(self, elapsed_time, delta_time, **kwargs):
+    def update(self, elapsed_time, delta_time, audio_parameters, **kwargs):
         if 'rms_buffer' in kwargs:
             rms_buffer = kwargs.get('rms_buffer')
             self.background_intensity = 1 - np.clip(

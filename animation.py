@@ -1,5 +1,4 @@
 import arcade
-import socket
 import time
 import json
 
@@ -7,6 +6,7 @@ import numpy as np
 
 from simplex_noise import snoise
 
+from audio_client import (AudioClient, AudioParameters)
 
 from random_interpolator import RandomInterpolator
 
@@ -15,6 +15,7 @@ from sun import Sun
 from pointcloud import PointCloud
 from ferris import Ferris
 from lines import Lines
+from shadows import Shadows
 
 from parameters import (
     num_points,
@@ -80,7 +81,6 @@ def func(coords, seed=141):
 starttime = time.time()
 now = 0
 
-PORT = 46498
 
 
 class MyGame(arcade.Window):
@@ -95,12 +95,7 @@ class MyGame(arcade.Window):
             vsync=True,
         )
 
-        self.socket = socket.socket(
-            socket.AF_INET,
-            socket.SOCK_DGRAM,
-        )
-        self.socket.bind(("0.0.0.0", PORT))
-        self.socket.setblocking(0)
+        self.audio_client = AudioClient()
 
         width, height = self.get_size()
         self.set_viewport(0, width, 0, height)
@@ -124,6 +119,8 @@ class MyGame(arcade.Window):
 
         self.state = InitialState()
         self.kick = False
+
+        self.audio_parameters = AudioParameters()
 
         arcade.enable_timings()
 
@@ -195,6 +192,9 @@ class MyGame(arcade.Window):
 
         if key == arcade.key.KEY_4:
             self.state = Lines()
+        
+        if key == arcade.key.KEY_5:
+            self.state = Shadows()
 
     def reset(self):
         width, height = self.get_size()
@@ -238,41 +238,24 @@ class MyGame(arcade.Window):
             ]
         )
         # XXX READING HERE
-        try:
-            while True:
-                raw_data = self.socket.recv(1024)
-                print(raw_data)
-        except BlockingIOError:
-            pass
+        
+        self.audio_parameters = self.audio_client.get_audio_parameters()
 
         try:
-            data = json.loads(raw_data)
-
-            low_c = data['low_rms']['limited_value']
-            low_c_norm = np.clip(low_c, None, 6e6) / 6e6
 
             self.low_buffer[1:] = np.copy(self.low_buffer[:-1])
-            self.low_buffer[0] = low_c_norm
-
-            mid_c = data['mid_rms']['limited_value']
-            mid_c_norm = np.clip(mid_c, None, 6e6) / 6e6
+            self.low_buffer[0] = AudioParameters.norm_freq(self.audio_parameters.low_rms_value)
 
             self.mid_buffer[1:] = np.copy(self.mid_buffer[:-1])
-            self.mid_buffer[0] = mid_c_norm
-
-            high_c = data['high_rms']['limited_value']
-            high_c_norm = np.clip(high_c, None, 6e6) / 6e6
+            self.mid_buffer[0] = AudioParameters.norm_freq(self.audio_parameters.mid_rms_value)
 
             self.high_buffer[1:] = np.copy(self.high_buffer[:-1])
-            self.high_buffer[0] = high_c_norm
-
-            rms = data['rms']["value"]
-            rms_norm = rms      # np.clip(rms, None, 1e4) / 1e4
+            self.high_buffer[0] = AudioParameters.norm_freq(self.audio_parameters.high_rms_value)
 
             self.rms_buffer[1:] = np.copy(self.rms_buffer[:-1])
-            self.rms_buffer[0] = rms_norm
+            self.rms_buffer[0] = self.audio_parameters.rms_value
 
-            self.kick = data['kick'] == 1
+            self.kick = self.audio_parameters.kick
         except UnboundLocalError:
             pass
 
@@ -283,6 +266,7 @@ class MyGame(arcade.Window):
         self.state.update(
             now,
             delta_time,
+            self.audio_parameters,
             rms_buffer=self.rms_buffer,
             kick=self.kick,
         )
