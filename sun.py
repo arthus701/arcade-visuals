@@ -96,7 +96,7 @@ class Sun(State):
             'main',
             hit_box_algorithm='None',
         )
-        self.update(0, 0)
+        self.update(0, 0, None)
         self.texture_atlas.add(self.texture)
 
         self.sprite_list = arcade.SpriteList(
@@ -106,8 +106,8 @@ class Sun(State):
             scale=subsamp,
             center_x=self.width // 2,
             center_y=self.height // 2,
-            image_width=self.width,
-            image_height=self.height,
+            image_width=self.width / 4,
+            image_height=self.height / 4,
             texture=self.texture,
             hit_box_algorithm='None',
             angle=0,
@@ -120,6 +120,7 @@ class Sun(State):
         pass
 
     def draw(self, width, height, **kwargs):
+
         self.sprite_list.draw(pixelated=True)
         # self.sprite.draw()
         # arcade.draw_texture_rectangle(
@@ -131,7 +132,25 @@ class Sun(State):
         # )
         self.texture_atlas.update_texture_image(self.texture)
 
-    def update(self, elapsed_time, delta_time, **kwargs):
+        if "background_intensity" in kwargs and 'bgcolor' in kwargs and 'bgtail' in kwargs:
+            self.background_intensity = kwargs.get('background_intensity')
+            bgcolor = kwargs.get('bgcolor')
+            bgtail = kwargs.get('bgtail')
+
+            arcade.draw_rectangle_filled(
+                width // 2,
+                height // 2,
+                width,
+                height,
+                color=(
+                    bgcolor[0] * (0.1 + 0.9 * self.background_intensity),
+                    bgcolor[1] * (0.1 + 0.9 * self.background_intensity),
+                    bgcolor[2] * (0.1 + 0.9 * self.background_intensity),
+                    bgtail,
+                ),
+            )
+
+    def update(self, elapsed_time, delta_time, audio_parameters, **kwargs):
         if 'rms_buffer' in kwargs:
             rms_buffer = kwargs.get('rms_buffer')
             exp_add = 1 - np.clip(

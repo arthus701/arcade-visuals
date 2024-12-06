@@ -2,12 +2,12 @@ import numpy as np
 from random_interpolator import RandomInterpolator
 
 bgcolor_list = [
-    np.array([255, 0, 0]),
+    np.array([100, 0, 100]),
     np.array([200, 0, 155]),
     np.array([100, 0, 255]),
     np.array([200, 0, 255]),
     np.array([255, 0, 255]),
-    np.array([100, 0, 100]),
+    np.array([255, 0, 0]),
 ]
 
 bgcolorInterpolator = RandomInterpolator(
