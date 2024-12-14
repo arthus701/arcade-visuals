@@ -221,24 +221,24 @@ class Shadows(State):
                 self.bgtail = min((250 * t) + 10, 50)
         else:
             self.bgtail = 150
-        
+
 
 
         if 'rms' in kwargs:
             self.rms = kwargs.get('rms')
-        
+
         if self.sun_counter >= 60.0 and self.show_sun:
             self.show_sun = False
             self.sun_counter = 0.0
-        
+
         if self.sun_counter >= 60.0 * 9 and self.show_sun:
             self.show_sun = True
             self.sun_counter = 0.0
-        
+
 
         self.background_intensity = 10 * self.params.rms_value
-        
-        
+
+
         if self.center_counter >= 60:
             self.sprite_options[self.center_variations[self.current_center_idx]]["show"] = False
 
@@ -252,15 +252,15 @@ class Shadows(State):
         if self.params.kick and self.pop_counter >= 5.0:
            self.sprite_options[self.center_variations[self.current_center_idx]]["pop"] = True
            self.pop_counter = 0.0
-        
+
         if self.birds_counter >= 15.0:
             self.sprite_options["birds_l"]["show"] = True
-                  
+
         self.sprite_options["birds_l"]["show"] = 15.0 <= self.birds_counter <= 15.05
         self.sprite_options["birds_r"]["show"] = 15.10 <= self.birds_counter <= 15.15
         if self.birds_counter >= 15.15:
             self.birds_counter = 0.0
-        
+
         if self.random_shadow_counter >= 30.0 and self.random_shadow_counter < 30.05 \
             and self.sprite_options[self.center_variations[self.current_center_idx]]["show"] == True:
             self.current_shadow_idx = np.random.random_integers(0, 3)
@@ -337,7 +337,7 @@ class Shadows(State):
             [
                 -np.sin(np.deg2rad(angs_shape)),
                 -np.cos(np.deg2rad(angs_shape)),
-                
+
             ]
         )
 
@@ -349,7 +349,7 @@ class Shadows(State):
             [
                 -np.sin(np.deg2rad(angs)),
                 -np.cos(np.deg2rad(angs)),
-                
+
             ]
         )
 
@@ -377,7 +377,7 @@ class Shadows(State):
 
 
     def draw(self, width, height, **kwargs):
-        
+
         bgcolor = bgcolorInterpolator.get()
         if self.show_sun:
             self.sun.draw(width, height, background_intensity=self.background_intensity, bgcolor=bgcolor, bgtail=min(bgtailInterpolator.get() * self.params.high_rms_value * 100, 255))
@@ -394,7 +394,7 @@ class Shadows(State):
                     self.bgtail,
                 ),
             )
-        
+
         arcade.draw_line_strip(
             self.left_line.T,
             arcade.color.WHITE,
@@ -428,11 +428,11 @@ class Shadows(State):
         self.sprite_butterfly.scale = width/4/width
         self.sprite_butterfly.center_x = width / 2
         self.sprite_butterfly.center_y = height / 2
-        
+
         self.sprite_flowers.scale = width/width
         self.sprite_flowers.center_x = width / 2
         self.sprite_flowers.center_y = height / 2
-        
+
         self.sprite_birds_l.scale = width/2/width
         self.sprite_birds_l.center_x = width / 4
         self.sprite_birds_l.center_y = height / 2
@@ -455,7 +455,7 @@ class Shadows(State):
             self.sprite_birds_l.scale = 0
         if not self.sprite_options["birds_r"]["show"]:
             self.sprite_birds_r.scale = 0
-        
+
         if self.sprite_options["girl"]["pop"]:
             self.sprite_girl.scale *= 1.5
             self.sprite_options["girl"]["pop"] = False
@@ -488,4 +488,4 @@ class Shadows(State):
         # self.sprite_flowers.draw()
         # self.sprite_girl.draw()
 
-        
+

@@ -1,5 +1,12 @@
-import socket, time, json
-import pyaudio, audioop, numpy as np
+import socket
+import time
+import json
+
+import numpy as np
+
+import pyaudio
+import audioop
+# import aubio
 
 CHUNK = 1024  # Number of data points to read at a time
 
@@ -9,9 +16,10 @@ UPDATE_RATE = 60
 
 PORT = 46497
 
-CLIENTS = [ ("10.0.1.9", 46498) ]
+CLIENTS = [ ("0.0.0.0", 46498) ]
 
 BILLION = 1000000000
+
 
 def analyse(buffer_data) -> dict:
     # Calculate the RMS value of each chunk to measure the volume
@@ -40,9 +48,9 @@ def analyse(buffer_data) -> dict:
         elif 2000 < freq <= 20000 and amp > high_amp_peak:
             high_freq_peak = freq
             high_amp_peak = amp
-        
+
         i = i + 1
-    
+
     return {
         "rms": rms,
         "low_peak": {
@@ -59,9 +67,16 @@ def analyse(buffer_data) -> dict:
         }
     }
 
+
 def main():
+    # a_tempo = aubio.tempo("default", 2*CHUNK, CHUNK, RATE)
+    # a_pitch = aubio.pitch("default", 2*CHUNK, CHUNK, RATE)
+    # a_pitch.set_unit("midi")
+    # a_pitch.set_tolerance(0.8)
+
     p = pyaudio.PyAudio()
     stream = p.open(
+        # format=pyaudio.paFloat32,
         format=pyaudio.paInt16,
         channels=1,
         rate=RATE,
@@ -76,6 +91,13 @@ def main():
         start_time = time.perf_counter_ns()
 
         buffer_data = stream.read(CHUNK)
+        # signal = np.frombuffer(buffer_data, dtype=np.float32)
+        # is_beat = a_tempo(signal)
+        # if is_beat:
+        #     print("BEET")
+        # pitch = a_pitch(signal)[0]
+        # confidence = a_pitch.get_confidence()
+        # print(f"{pitch} / {confidence}")
 
         audio_data = analyse(buffer_data)
 
@@ -92,7 +114,9 @@ def main():
         if delta < BILLION / UPDATE_RATE:
             time.sleep(((BILLION / UPDATE_RATE) - delta) / BILLION)
         else:
-            print(f"Framerate dropped below {UPDATE_RATE}")
+            # print(f"Framerate dropped below {UPDATE_RATE}")
+            pass
+
 
 if __name__ == "__main__":
     while True:

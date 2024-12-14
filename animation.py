@@ -192,7 +192,7 @@ class MyGame(arcade.Window):
 
         if key == arcade.key.KEY_4:
             self.state = Lines()
-        
+
         if key == arcade.key.KEY_5:
             self.state = Shadows()
 
@@ -238,7 +238,7 @@ class MyGame(arcade.Window):
             ]
         )
         # XXX READING HERE
-        
+
         self.audio_parameters = self.audio_client.get_audio_parameters()
 
         try:
@@ -266,7 +266,7 @@ class MyGame(arcade.Window):
         self.state.update(
             now,
             delta_time,
-            self.audio_parameters,
+            audio_parameters=self.audio_parameters,
             rms_buffer=self.rms_buffer,
             kick=self.kick,
         )

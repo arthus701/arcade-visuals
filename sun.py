@@ -165,8 +165,8 @@ class Sun(State):
             exp_add = 0
         if 'kick' in kwargs:
             kick = kwargs.get('kick')
-            if kick:
-                self.glow_max += 0.5
+            # if kick:
+            #     self.glow_max += 0.5
 
         arg = np.round(elapsed_time, 2)
         self.vals = func(

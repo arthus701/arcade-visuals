@@ -104,8 +104,8 @@ class PointCloud(State):
             )
         if 'kick' in kwargs:
             kick = kwargs.get('kick')
-            if kick:
-                self.add_freq += 0.05
+            # if kick:
+            #     self.add_freq += 0.05
 
         seedInterpolator.update(delta_time)
         freqInterpolator.update(delta_time)
